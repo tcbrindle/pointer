@@ -32,9 +32,8 @@ DEALINGS IN THE SOFTWARE.
 #include <concepts>
 #include <cstddef>
 #include <functional> // for std::invoke
-#include <limits>
 #include <memory> // for std::addressof
-#include <optional> // for optional<pointer>
+#include <optional> // for std::optional<pointer>
 #include <ranges> // for std::ranges::contiguous_range etc
 #include <stdexcept> // for std::out_of_range
 #include <typeinfo>
@@ -104,11 +103,11 @@ template <typename T>
     requires(std::is_object_v<T> && !std::is_unbounded_array_v<T>)
 struct pointer<T> {
 private:
-    T* ptr_;
+    T* addr_;
 
     friend class std::optional<pointer<T>>;
 
-    constexpr explicit pointer(T* ptr TCB_PTR_LIFETIME_BOUND) noexcept : ptr_(ptr) { }
+    constexpr explicit pointer(T* addr TCB_PTR_LIFETIME_BOUND) noexcept : addr_(addr) { }
 
 public:
     using element_type = T;
@@ -122,45 +121,45 @@ public:
 
     template <typename U>
         requires std::convertible_to<U*, T*>
-    static constexpr auto from_address(U* ptr TCB_PTR_LIFETIME_BOUND) -> pointer
+    static constexpr auto from_address(U* addr TCB_PTR_LIFETIME_BOUND) -> pointer
     {
-        if (!ptr) {
+        if (!addr) {
             TCB_PTR_RUNTIME_ERROR("Null passed to from_address()");
         }
-        return pointer(ptr);
+        return pointer(addr);
     }
 
     template <typename U>
         requires requires {
-            { pointer<U>::pointer_to(*ptr_) };
+            { pointer<U>::pointer_to(*addr_) };
         }
     constexpr operator pointer<U>() const noexcept
     {
-        return pointer<U>::pointer_to(*ptr_);
+        return pointer<U>::pointer_to(*addr_);
     }
 
-    constexpr explicit operator T*() const noexcept { return ptr_; }
+    constexpr explicit operator T*() const noexcept { return addr_; }
 
-    constexpr explicit operator bool() const noexcept { return ptr_ != nullptr; }
+    constexpr explicit operator bool() const noexcept { return addr_ != nullptr; }
 
 #ifdef __cpp_multidimensional_subscript
-    constexpr auto operator[]() const noexcept -> T& { return *ptr_; }
+    constexpr auto operator[]() const noexcept -> T& { return *addr_; }
 #endif
 
-    constexpr auto to_address() const noexcept -> T* { return ptr_; }
+    constexpr auto to_address() const noexcept -> T* { return addr_; }
 
-    constexpr auto operator*() const noexcept -> T& { return *ptr_; }
+    constexpr auto operator*() const noexcept -> T& { return *addr_; }
 
-    constexpr auto operator->() const noexcept -> T* { return ptr_; }
+    constexpr auto operator->() const noexcept -> T* { return addr_; }
 
     friend constexpr auto operator==(pointer lhs, pointer rhs) -> bool
     {
-        return lhs.ptr_ == rhs.ptr_;
+        return lhs.addr_ == rhs.addr_;
     }
 
     friend constexpr auto operator<=>(pointer lhs, pointer rhs) -> std::strong_ordering
     {
-        return std::compare_three_way{}(lhs.ptr_, rhs.ptr_);
+        return std::compare_three_way{}(lhs.addr_, rhs.addr_);
     }
 };
 
@@ -171,21 +170,21 @@ namespace detail {
 #if TCB_PTR_RTTI_ENABLED
 template <typename V>
 struct void_pointer_base {
-    V* ptr_;
+    V* addr_;
     std::type_info const* type_;
 
     template <typename U>
-    void_pointer_base(U* ptr) : ptr_(ptr), type_(&typeid(U))
+    void_pointer_base(U* addr) : addr_(addr), type_(&typeid(U))
     {
     }
 };
 #else
 template <typename V>
 struct void_pointer_base {
-    V* ptr_;
+    V* addr_;
 
     template <typename U>
-    void_pointer_base(U* ptr) : ptr_(ptr)
+    void_pointer_base(U* addr) : addr_(addr)
     {
     }
 };
@@ -197,11 +196,15 @@ template <typename V>
     requires std::is_void_v<V>
 struct pointer<V> : detail::void_pointer_base<V> {
 private:
+    explicit pointer(std::nullptr_t) : detail::void_pointer_base<V>((V*)nullptr) { }
+
     template <typename U>
         requires std::convertible_to<U*, V*>
-    explicit pointer(U* ptr TCB_PTR_LIFETIME_BOUND) : detail::void_pointer_base<V>(ptr)
+    explicit pointer(U* addr TCB_PTR_LIFETIME_BOUND) : detail::void_pointer_base<V>(addr)
     {
     }
+
+    friend class std::optional<pointer<V>>;
 
 public:
     using element_type = V;
@@ -215,17 +218,17 @@ public:
 
     template <typename U>
         requires std::convertible_to<U*, V*>
-    static constexpr auto from_address(U* ptr TCB_PTR_LIFETIME_BOUND) -> pointer
+    static constexpr auto from_address(U* addr TCB_PTR_LIFETIME_BOUND) -> pointer
     {
-        if (!ptr) {
+        if (!addr) {
             TCB_PTR_RUNTIME_ERROR("Null passed to pointer::from_address()");
         }
-        return pointer(ptr);
+        return pointer(addr);
     }
 
-    auto to_address() const -> V* { return this->ptr_; }
+    auto to_address() const -> V* { return this->addr_; }
 
-    auto operator->() const -> V* { return this->ptr_; }
+    auto operator->() const -> V* { return this->addr_; }
 
 #if TCB_PTR_RTTI_ENABLED
     auto type() const -> std::type_info const& { return *this->type_; }
@@ -240,7 +243,7 @@ public:
             TCB_PTR_RUNTIME_ERROR("Type mismatch in conversion from void pointer");
         }
 #endif
-        return pointer<U>::pointer_to(*static_cast<U*>(this->ptr_));
+        return pointer<U>::pointer_to(*static_cast<U*>(this->addr_));
     }
 
     template <typename U>
@@ -252,16 +255,16 @@ public:
             TCB_PTR_RUNTIME_ERROR("Type mismatch in conversion from void pointer");
         }
 #endif
-        return static_cast<U*>(this->ptr_);
+        return static_cast<U*>(this->addr_);
     }
 
-    explicit operator bool() const noexcept { return this->ptr_ != nullptr; }
+    explicit operator bool() const noexcept { return this->addr_ != nullptr; }
 
-    friend auto operator==(pointer lhs, pointer rhs) -> bool { return lhs.ptr_ == rhs.ptr_; }
+    friend auto operator==(pointer lhs, pointer rhs) -> bool { return lhs.addr_ == rhs.addr_; }
 
     friend auto operator<=>(pointer lhs, pointer rhs) -> std::strong_ordering
     {
-        return std::compare_three_way{}(lhs.ptr_, rhs.ptr_);
+        return std::compare_three_way{}(lhs.addr_, rhs.addr_);
     }
 };
 
@@ -276,11 +279,6 @@ private:
     std::ptrdiff_t pos_ = 0;
     std::ptrdiff_t size_ = 0;
 
-    constexpr explicit checked_iterator(T* start, std::ptrdiff_t pos, std::ptrdiff_t size)
-        : start_(start), pos_(pos), size_(size)
-    {
-    }
-
     friend struct checked_iterator<std::add_const_t<T>>;
 
 public:
@@ -289,24 +287,15 @@ public:
     using difference_type = std::ptrdiff_t;
     using iterator_category = std::contiguous_iterator_tag;
 
-    static constexpr auto to_start(T* addr, std::size_t size) -> checked_iterator
-    {
-        if (size > static_cast<std::size_t>(std::numeric_limits<std::ptrdiff_t>::max())) {
-            TCB_PTR_RUNTIME_ERROR("Cannot iterate array larger than PTRDIFF_MAX");
-        }
-        return checked_iterator(addr, 0, static_cast<std::ptrdiff_t>(size));
-    }
-
-    static constexpr auto to_end(T* addr, std::size_t size) -> checked_iterator
-    {
-        if (size > static_cast<std::size_t>(std::numeric_limits<std::ptrdiff_t>::max())) {
-            TCB_PTR_RUNTIME_ERROR("Cannot iterate array larger than PTRDIFF_MAX");
-        }
-        return checked_iterator(addr, static_cast<std::ptrdiff_t>(size),
-                                static_cast<std::ptrdiff_t>(size));
-    }
-
     checked_iterator() = default;
+
+    constexpr explicit checked_iterator(T* start, std::ptrdiff_t pos, std::ptrdiff_t size)
+        : start_(start), pos_(pos), size_(size)
+    {
+        if (pos_ < 0 || pos_ > size_) {
+            TCB_PTR_RUNTIME_ERROR("Bad size or position in checked_iterator ctor");
+        }
+    }
 
     constexpr checked_iterator(checked_iterator<std::remove_const_t<T>> const& other)
         requires(std::is_const_v<T>)
@@ -411,6 +400,36 @@ public:
     friend auto operator<=>(checked_iterator, checked_iterator) -> std::strong_ordering = default;
 };
 
+#ifndef TCB_PTR_USE_UNCHECKED_ITERATORS
+template <typename T>
+using contiguous_iterator_t = checked_iterator<T>;
+#else
+template <typename T>
+using contiguous_iterator_t = T*;
+#endif
+
+template <typename T>
+constexpr auto make_begin_iterator(T* addr, std::size_t size [[maybe_unused]])
+    -> contiguous_iterator_t<T>
+{
+#ifndef TCB_PTR_USE_UNCHECKED_ITERATORS
+    return checked_iterator<T>(addr, 0, static_cast<std::ptrdiff_t>(size));
+#else
+    return addr;
+#endif
+}
+
+template <typename T>
+constexpr auto make_end_iterator(T* addr, std::size_t size) -> contiguous_iterator_t<T>
+{
+#ifndef TCB_PTR_USE_UNCHECKED_ITERATORS
+    return checked_iterator<T>(addr, static_cast<std::ptrdiff_t>(size),
+                               static_cast<std::ptrdiff_t>(size));
+#else
+    return addr + size;
+#endif
+}
+
 } // namespace detail
 
 // MARK: Slice
@@ -419,13 +438,13 @@ template <typename T>
     requires(std::is_object_v<T> && !std::is_const_v<T>)
 struct slice {
 private:
-    T* ptr_;
+    T* addr_;
     std::size_t sz_;
 
     friend struct pointer<T[]>;
     friend struct pointer<T const[]>;
 
-    constexpr explicit slice(T* ptr, std::size_t sz) : ptr_(ptr), sz_(sz) { }
+    constexpr explicit slice(T* addr, std::size_t sz) : addr_(addr), sz_(sz) { }
 
 public:
     using value_type = T;
@@ -435,8 +454,8 @@ public:
     using const_reference = T const&;
     using pointer = value_type*;
     using const_pointer = value_type const*;
-    using iterator = detail::checked_iterator<value_type>;
-    using const_iterator = detail::checked_iterator<value_type const>;
+    using iterator = detail::contiguous_iterator_t<value_type>;
+    using const_iterator = detail::contiguous_iterator_t<value_type const>;
     using reverse_iterator = std::reverse_iterator<iterator>;
     using const_reverse_iterator = std::reverse_iterator<const_iterator>;
 
@@ -448,7 +467,7 @@ public:
         if (idx >= sz_) {
             TCB_PTR_RUNTIME_ERROR("Index out of bounds in slice access");
         }
-        return ptr_[idx];
+        return addr_[idx];
     }
 
     constexpr auto operator[](size_type idx) const -> const_reference
@@ -456,7 +475,7 @@ public:
         if (idx >= sz_) {
             TCB_PTR_RUNTIME_ERROR("Index out of bounds in slice access");
         }
-        return ptr_[idx];
+        return addr_[idx];
     }
 
     constexpr auto at(size_type idx) -> reference
@@ -464,7 +483,7 @@ public:
         if (idx >= sz_) {
             TCB_PTR_THROW(std::out_of_range("Index out of bounds in slice access"));
         }
-        return ptr_[idx];
+        return addr_[idx];
     }
 
     constexpr auto at(size_type idx) const -> const_reference
@@ -472,7 +491,7 @@ public:
         if (idx >= sz_) {
             TCB_PTR_THROW(std::out_of_range("Index out of bounds in slice access"));
         }
-        return ptr_[idx];
+        return addr_[idx];
     }
 
     constexpr auto front() -> reference
@@ -480,7 +499,7 @@ public:
         if (sz_ == 0) {
             TCB_PTR_RUNTIME_ERROR("Accessing front of empty slice");
         }
-        return ptr_[0];
+        return addr_[0];
     }
 
     constexpr auto front() const -> const_reference
@@ -488,7 +507,7 @@ public:
         if (sz_ == 0) {
             TCB_PTR_RUNTIME_ERROR("Accessing front of empty slice");
         }
-        return ptr_[0];
+        return addr_[0];
     }
 
     constexpr auto back() -> reference
@@ -496,7 +515,7 @@ public:
         if (sz_ == 0) {
             TCB_PTR_RUNTIME_ERROR("Accessing back of empty slice");
         }
-        return ptr_[sz_ - 1];
+        return addr_[sz_ - 1];
     }
 
     constexpr auto back() const -> const_reference
@@ -504,22 +523,25 @@ public:
         if (sz_ == 0) {
             TCB_PTR_RUNTIME_ERROR("Accessing back of empty slice");
         }
-        return ptr_[sz_ - 1];
+        return addr_[sz_ - 1];
     }
 
     constexpr auto size() const -> size_type { return sz_; }
     constexpr auto empty() const -> bool { return sz_ == 0; }
 
-    constexpr auto data() -> pointer { return ptr_; }
-    constexpr auto data() const -> const_pointer { return ptr_; }
+    constexpr auto data() -> pointer { return addr_; }
+    constexpr auto data() const -> const_pointer { return addr_; }
 
-    constexpr auto begin() -> iterator { return iterator::to_start(ptr_, sz_); }
-    constexpr auto begin() const -> const_iterator { return const_iterator::to_start(ptr_, sz_); }
-    constexpr auto cbegin() const -> const_iterator { return const_iterator::to_start(ptr_, sz_); }
+    constexpr auto begin() -> iterator { return detail::make_begin_iterator(addr_, sz_); }
+    constexpr auto begin() const -> const_iterator
+    {
+        return detail::make_begin_iterator(addr_, sz_);
+    }
+    constexpr auto cbegin() const -> const_iterator { return begin(); }
 
-    constexpr auto end() -> iterator { return iterator::to_end(ptr_, sz_); }
-    constexpr auto end() const -> const_iterator { return iterator::to_end(ptr_, sz_); }
-    constexpr auto cend() const -> const_iterator { return iterator::to_end(ptr_, sz_); }
+    constexpr auto end() -> iterator { return detail::make_end_iterator(addr_, sz_); }
+    constexpr auto end() const -> const_iterator { return detail::make_end_iterator(addr_, sz_); }
+    constexpr auto cend() const -> const_iterator { return end(); }
 
     constexpr auto rbegin() -> reverse_iterator { return reverse_iterator(end()); }
     constexpr auto rbegin() const -> const_reverse_iterator
@@ -564,12 +586,9 @@ template <typename T>
 struct pointer<T[]> {
 private:
     using slice_type = slice<std::remove_const_t<T>>;
-    mutable slice_type slice_;
+    mutable slice_type slice_ = slice_type(nullptr, 0);
 
     friend class std::optional<pointer<T[]>>;
-
-    // super secret constructor for use with optional
-    constexpr explicit pointer(std::nullptr_t) noexcept : slice_(nullptr, 0) { }
 
     constexpr explicit pointer(T* ptr, std::size_t sz)
         : slice_(const_cast<std::remove_const_t<T>*>(ptr), sz)
@@ -578,6 +597,10 @@ private:
 
 public:
     using element_type = std::conditional_t<std::is_const_v<T>, slice_type const, slice_type>;
+
+    pointer() = default;
+
+    constexpr pointer(std::nullptr_t) noexcept { }
 
     template <detail::pointer_compatible_range R>
         requires std::convertible_to<
@@ -599,7 +622,7 @@ public:
         return pointer(ptr, sz);
     }
 
-    constexpr pointer(pointer const& other) noexcept : slice_(other.slice_.ptr_, other.slice_.sz_)
+    constexpr pointer(pointer const& other) noexcept : slice_(other.slice_.addr_, other.slice_.sz_)
     {
     }
 
@@ -612,7 +635,7 @@ public:
 
     constexpr auto operator=(pointer const& other) noexcept -> pointer&
     {
-        slice_.ptr_ = other.slice_.ptr_;
+        slice_.addr_ = other.slice_.addr_;
         slice_.sz_ = other.slice_.sz_;
         return *this;
     }
@@ -637,7 +660,7 @@ public:
     }
     void operator->() const&& = delete;
 
-    constexpr explicit operator bool() const noexcept { return slice_.ptr_ != nullptr; }
+    constexpr explicit operator bool() const noexcept { return slice_.addr_ != nullptr; }
 
     friend constexpr auto operator==(pointer const& lhs, pointer const& rhs) -> bool
     {
@@ -651,6 +674,9 @@ public:
         return cmp == 0 ? lhs->size() <=> rhs->size() : cmp;
     }
 };
+
+template <typename T>
+using array_pointer = pointer<T[]>;
 
 // MARK: Functions
 
@@ -705,11 +731,70 @@ struct to_address_t {
     }
 };
 
+template <typename To>
+struct static_pointer_cast_t {
+    template <typename From>
+        requires requires(From* from) {
+            { static_cast<To*>(from) };
+        }
+    constexpr auto operator()(pointer<From> ptr) const noexcept -> pointer<To>
+    {
+        if constexpr (std::is_unbounded_array_v<To>) {
+            static_assert(std::is_unbounded_array_v<From>);
+            return pointer<To>::from_address_with_size(
+                static_cast<std::remove_extent_t<To>*>(ptr->data()), ptr->size());
+        } else {
+            return pointer<To>::from_address(static_cast<To*>(ptr.to_address()));
+        }
+    }
+};
+
+template <typename To>
+struct const_pointer_cast_t {
+    template <typename From>
+        requires requires(From* from) {
+            { const_cast<To*>(from) };
+        }
+    constexpr auto operator()(pointer<From> ptr) const noexcept -> pointer<To>
+    {
+        if constexpr (std::is_unbounded_array_v<To>) {
+            static_assert(std::is_unbounded_array_v<From>);
+            return pointer<To>::from_address_with_size(
+                const_cast<std::remove_extent_t<To>*>(ptr->data()), ptr->size());
+        } else {
+            return pointer<To>::from_address(const_cast<To*>(ptr.to_address()));
+        }
+    }
+};
+
+template <typename Derived>
+struct dynamic_pointer_cast_t {
+    template <typename Base>
+        requires requires(Base* base) {
+            { dynamic_cast<Derived*>(base) };
+        }
+    constexpr auto operator()(pointer<Base> ptr) const noexcept -> std::optional<pointer<Derived>>
+    {
+        Derived* addr = dynamic_cast<Derived*>(ptr.to_address());
+        if (addr) {
+            return pointer<Derived>::from_address(addr);
+        } else {
+            return {};
+        }
+    }
+};
+
 inline constexpr auto pointer_to = pointer_to_t{};
 inline constexpr auto pointer_to_mut = pointer_to_mut_t{};
 inline constexpr auto pointer_to_array = pointer_to_array_t{};
 inline constexpr auto pointer_to_mut_array = pointer_to_mut_array_t{};
 inline constexpr auto to_address = to_address_t{};
+template <typename To>
+inline constexpr auto static_pointer_cast = static_pointer_cast_t<To>{};
+template <typename To>
+inline constexpr auto const_pointer_cast = const_pointer_cast_t<To>{};
+template <typename Derived>
+inline constexpr auto dynamic_pointer_cast = dynamic_pointer_cast_t<Derived>{};
 
 // Slightly shortened aliases
 template <typename T>
@@ -749,14 +834,15 @@ struct hash<tcb::pointer<T>> {
 // MARK: std::optional
 
 template <typename T>
+    requires(!std::is_unbounded_array_v<T>)
 class optional<tcb::pointer<T>> {
 private:
     tcb::pointer<T> ptr_;
 
 public:
     using value_type = tcb::pointer<T>;
-    using iterator = tcb::detail::checked_iterator<value_type>;
-    using const_iterator = tcb::detail::checked_iterator<value_type const>;
+    using iterator = tcb::detail::contiguous_iterator_t<value_type>;
+    using const_iterator = tcb::detail::contiguous_iterator_t<value_type const>;
 
     /*
      * Constructors
@@ -915,22 +1001,22 @@ public:
      */
     constexpr auto begin() noexcept -> iterator
     {
-        return iterator::to_start(std::addressof(ptr_), has_value() ? 1 : 0);
+        return tcb::detail::make_begin_iterator(std::addressof(ptr_), has_value() ? 1 : 0);
     }
 
     constexpr auto begin() const noexcept -> const_iterator
     {
-        return const_iterator::to_start(std::addressof(ptr_), has_value() ? 1 : 0);
+        return tcb::detail::make_begin_iterator(std::addressof(ptr_), has_value() ? 1 : 0);
     }
 
     constexpr auto end() noexcept -> iterator
     {
-        return iterator::to_end(std::addressof(ptr_), has_value() ? 1 : 0);
+        return tcb::detail::make_end_iterator(std::addressof(ptr_), has_value() ? 1 : 0);
     }
 
     constexpr auto end() const noexcept -> const_iterator
     {
-        return const_iterator::to_end(std::addressof(ptr_), has_value() ? 1 : 0);
+        return tcb::detail::make_end_iterator(std::addressof(ptr_), has_value() ? 1 : 0);
     }
 
     /*

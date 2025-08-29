@@ -100,9 +100,14 @@ constexpr bool test_pointer_static_properties()
         static_assert(sizeof(P) == sizeof(T*));
     }
 
-    // pointer<T> is not default constructible
-    static_assert(not std::is_default_constructible_v<P>);
-    static_assert(not std::default_initializable<P>);
+    // pointer<T> is not default constructible unless T is an unbounded array type
+    if constexpr (not std::is_unbounded_array_v<T>) {
+        static_assert(not std::is_default_constructible_v<P>);
+        static_assert(not std::default_initializable<P>);
+    } else {
+        static_assert(std::is_default_constructible_v<P>);
+        static_assert(std::default_initializable<P>);
+    }
 
     // pointer<T> is copyable, movable, etc (type traits)
     static_assert(std::is_copy_constructible_v<P>);
@@ -572,8 +577,8 @@ constexpr bool test_checked_iterator()
     {
         std::array arr{1, 2, 3, 4, 5};
 
-        auto start = Iter::to_start(arr.data(), arr.size());
-        auto end = Iter::to_end(arr.data(), arr.size());
+        auto start = Iter(arr.data(), 0, arr.size());
+        auto end = Iter(arr.data(), arr.size(), arr.size());
 
         REQUIRE(std::ranges::equal(arr, std::ranges::subrange(start, end)));
         REQUIRE(std::ranges::equal(arr | std::views::reverse,
@@ -584,7 +589,7 @@ constexpr bool test_checked_iterator()
     {
         std::array arr{1, 2, 3, 4, 5};
 
-        auto start = Iter::to_start(arr.data(), arr.size());
+        auto start = Iter(arr.data(), 0, arr.size());
         auto next = std::next(start);
 
         REQUIRE(start == start);
@@ -599,8 +604,8 @@ constexpr bool test_checked_iterator()
     {
         std::array arr{1, 2, 3, 4, 5};
 
-        auto start = Iter::to_start(arr.data(), arr.size());
-        auto end = Iter::to_end(arr.data(), arr.size());
+        auto start = Iter(arr.data(), 0, arr.size());
+        auto end = Iter(arr.data(), arr.size(), arr.size());
 
         REQUIRE(start + 5 == end);
         REQUIRE(end - 5 == start);
@@ -611,7 +616,7 @@ constexpr bool test_checked_iterator()
     {
         std::array arr{1, 2, 3, 4, 5};
 
-        Iter start = Iter::to_start(arr.data(), arr.size());
+        Iter start = Iter(arr.data(), 0, arr.size());
         ++start;
 
         CIter copy = start;
@@ -630,8 +635,8 @@ bool test_checked_iterator_bounds_checking()
 
     std::array arr{1, 2, 3, 4, 5};
 
-    auto start = Iter::to_start(arr.data(), arr.size());
-    auto end = Iter::to_end(arr.data(), arr.size());
+    auto start = Iter(arr.data(), 0, arr.size());
+    auto end = Iter(arr.data(), arr.size(), arr.size());
 
     // Cannot deref end iterator
     REQUIRE_ERROR(*end);
@@ -1025,7 +1030,15 @@ constexpr bool test_array_pointer()
         }
     }
 
-    // constructors etc
+    // default/nullptr constructors:
+    {
+        tcb::pointer<int[]> p;
+        REQUIRE(p->data() == nullptr && p->size() == 0);
+
+        REQUIRE(p == nullptr);
+    }
+
+    // other constructors etc
     {
         std::array arr1{1, 2, 3, 4, 5};
         std::array arr2{6, 7, 8, 9, 10};
@@ -1105,6 +1118,104 @@ constexpr bool test_array_pointer()
     return true;
 }
 static_assert(test_array_pointer());
+
+/*
+ * MARK: cast tests
+ */
+bool test_pointer_casts()
+{
+    // static cast from void to object pointer works
+    // (can also do this as an explicit conversion)
+    {
+        int i = 0;
+
+        auto void_ptr = tcb::ptr<void>::pointer_to(i);
+
+        auto int_ptr = tcb::static_pointer_cast<int>(void_ptr);
+
+        REQUIRE(std::to_address(int_ptr) == std::addressof(i));
+    }
+
+    // unsafe static cast from base to derived works
+    {
+        DerivedClass d;
+
+        auto base_ptr = tcb::ptr<BaseClass>::pointer_to(d);
+        REQUIRE(std::to_address(base_ptr) == std::addressof(d));
+
+        auto derived_ptr = tcb::static_pointer_cast<DerivedClass>(base_ptr);
+        REQUIRE(std::to_address(derived_ptr) == std::addressof(d));
+    }
+
+    // const cast from const to non-const works
+    {
+        // for objects...
+        {
+            int i = 0;
+            auto cptr = tcb::pointer_to(i);
+
+            auto mptr = tcb::const_pointer_cast<int>(cptr);
+
+            *mptr = 3;
+            REQUIRE(i == 3);
+        }
+
+        // for void...
+        {
+            int i = 0;
+
+            auto cptr = tcb::ptr<void const>::pointer_to(i);
+
+            auto mptr = tcb::const_pointer_cast<void>(cptr);
+
+            auto iptr = tcb::static_pointer_cast<int>(mptr);
+
+            *iptr = 3;
+            REQUIRE(i == 3);
+        }
+
+        // for arrays...
+        {
+            std::array arr{1, 2, 3, 4, 5};
+
+            auto cptr = tcb::ptr_to_array(arr);
+
+            auto mptr = tcb::const_pointer_cast<int[]>(cptr);
+
+            mptr->at(0) = 3;
+
+            REQUIRE(arr[0] == 3);
+        }
+    }
+
+    // Dynamic casts work as expected
+    {
+        // Successful
+        {
+            DerivedClass d;
+
+            auto bptr = tcb::ptr<BaseClass>::pointer_to(d);
+
+            auto opt = tcb::dynamic_pointer_cast<DerivedClass>(bptr);
+
+            REQUIRE(opt.has_value());
+            REQUIRE(std::to_address(*opt) == std::addressof(d));
+        }
+
+        // Unsuccessful
+        {
+            BaseClass b;
+
+            auto bptr = tcb::ptr<BaseClass>::pointer_to(b);
+
+            auto opt = tcb::dynamic_pointer_cast<DerivedClass>(bptr);
+
+            REQUIRE(not opt.has_value());
+        }
+    }
+
+    return true;
+}
 
 /*
  * MARK: std::hash tests
@@ -1517,6 +1628,9 @@ int main()
 
     // array pointer tests
     b = test_array_pointer();
+    REQUIRE(b);
+
+    b = test_pointer_casts();
     REQUIRE(b);
 
     // std::hash tests
