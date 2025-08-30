@@ -1593,14 +1593,7 @@ constexpr bool test_std_optional_specialisation()
         REQUIRE(opt.has_value());
         REQUIRE(&(*opt)->at(0) == &arr[0]);
 
-        // Now this is some fun
-        auto deref = [](auto& ptr) -> auto& { return *ptr; };
-
-        auto view = opt | std::views::transform(deref) | std::views::join;
-
-        for (int& i : view) {
-            i = 99;
-        }
+        std::ranges::fill(**opt, 99);
 
         REQUIRE(std::ranges::all_of(arr, [](int i) { return i == 99; }));
     }
