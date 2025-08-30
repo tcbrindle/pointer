@@ -11,13 +11,11 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        compiler: [GCC-12, GCC-13, GCC-14, GCC-15, Clang-17, Clang-18, Clang-19, Clang-20]
+        compiler: [GCC-13, GCC-14, GCC-15, Clang-17, Clang-18, Clang-19, Clang-20]
         #test_with: [Headers, Module]
         build_type: [Debug, Release]
 
         #exclude:
-        #  - compiler: GCC-12
-        #    test_with: Module
         #  - compiler: GCC-13
         #    test_with: Module
         #  - compiler: GCC-14
@@ -28,11 +26,6 @@ jobs:
         #    test_with: Module
 
         include:
-          - compiler: GCC-12
-            cxx: g++-12
-            install: |
-              brew install gcc@12 ninja binutils
-              brew link --force binutils
           - compiler: GCC-13
             cxx: g++-13
             install: |
