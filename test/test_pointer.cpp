@@ -1581,7 +1581,7 @@ constexpr bool test_std_optional_specialisation()
     // optional<pointer<T[]>> works correctly
     {
         using Opt = std::optional<tcb::pointer<int[]>>;
-        REQUIRE(sizeof(Opt) == sizeof(tcb::pointer<int[]>));
+        static_assert(sizeof(Opt) == sizeof(tcb::pointer<int[]>));
 
         Opt opt{};
         REQUIRE(not opt.has_value());
