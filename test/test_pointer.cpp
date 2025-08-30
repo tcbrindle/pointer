@@ -1357,7 +1357,7 @@ constexpr bool test_std_optional_specialisation()
         REQUIRE(**o2b == 0);
 
         Opt3 o3 = ConvertibleToPointer{.ptr = &i};
-        Opt1 o1b = o3;
+        [[maybe_unused]] Opt1 o1b = o3;
     }
 
     // Converting move constructor
