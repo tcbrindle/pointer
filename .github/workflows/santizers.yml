@@ -1,0 +1,50 @@
+name: sanitizers
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        sanitizer: [address, undefined]
+        build_type: [Debug, Release]
+        include:
+          - cxx: g++-15
+            install: |
+              brew install gcc@15 ninja binutils
+              brew link --force binutils
+
+    steps:
+      - uses: actions/checkout@master
+
+      - name: Set up Homebrew
+        uses: Homebrew/actions/setup-homebrew@master
+
+      - name: Create Build Environment
+        run: |
+          ${{matrix.install}}
+          cmake -E make_directory ${{runner.workspace}}/build
+
+      - name: Configure
+        working-directory: ${{runner.workspace}}/build
+        run: |
+          cmake -GNinja \
+                -DCMAKE_CXX_COMPILER=g++-15 \
+                -DCMAKE_CXX_FLAGS="-fsanitize=${{matrix.sanitizer}}" \
+                -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=${{matrix.sanitizer}}" \
+                $GITHUB_WORKSPACE
+
+      - name: Build
+        working-directory: ${{runner.workspace}}/build
+        run: cmake --build .
+
+      - name: Test
+        working-directory: ${{runner.workspace}}/build
+        run: ctest -C ${{matrix.build_type}}
+        env:
+          CTEST_OUTPUT_ON_FAILURE: True
