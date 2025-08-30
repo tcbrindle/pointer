@@ -14,5 +14,6 @@ add_library(tcb::pointer ALIAS tcb_pointer)
 option(TCB_POINTER_BUILD_TESTS "Build tests" ${PROJECT_IS_TOP_LEVEL})
 
 if (TCB_POINTER_BUILD_TESTS)
+    enable_testing()
     add_subdirectory(test)
 endif()

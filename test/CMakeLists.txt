@@ -1,6 +1,4 @@
 
-enable_testing()
-
 add_executable(test_tcb_pointer test_pointer.cpp)
 target_link_libraries(test_tcb_pointer PUBLIC tcb_pointer)
 
