@@ -1,3 +1,7 @@
+
+#ifndef TCB_PTR_HPP_INCLUDED
+#define TCB_PTR_HPP_INCLUDED
+
 /*
 Copyright (c) 2025 Tristan Brindle (tcbrindle at gmail dot com)
 
@@ -23,9 +27,6 @@ FOR ANY DAMAGES OR OTHER LIABILITY, WHETHER IN CONTRACT, TORT OR OTHERWISE,
 ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 */
-
-#ifndef TCB_PTR_HPP_INCLUDED
-#define TCB_PTR_HPP_INCLUDED
 
 #include <algorithm> // for std::ranges::equal, std::lexicographical_compare_three_way
 #include <compare> // for std::strong_ordering
@@ -58,6 +59,12 @@ namespace detail {
 #    define TCB_PTR_LIFETIME_BOUND [[msvc::lifetimebound]]
 #else
 #    define TCB_PTR_LIFETIME_BOUND
+#endif
+
+#if __has_cpp_attribute(gsl::Pointer)
+#    define TCB_PTR_GSL_POINTER(T) [[gsl::Pointer(T)]]
+#else
+#    define TCB_PTR_GSL_POINTER(T)
 #endif
 
 #ifndef TCB_PTR_RUNTIME_ERROR
@@ -101,7 +108,7 @@ struct pointer;
 
 template <typename T>
     requires(std::is_object_v<T> && !std::is_unbounded_array_v<T>)
-struct pointer<T> {
+struct TCB_PTR_GSL_POINTER(T) pointer<T> {
 private:
     T* addr_;
 
@@ -170,8 +177,8 @@ namespace detail {
 #if TCB_PTR_RTTI_ENABLED
 template <typename V>
 struct void_pointer_base {
-    V* addr_;
-    std::type_info const* type_;
+    V* addr_ = nullptr;
+    std::type_info const* type_ = nullptr;
 
     template <typename U>
     void_pointer_base(U* addr) : addr_(addr), type_(&typeid(U))
@@ -181,7 +188,7 @@ struct void_pointer_base {
 #else
 template <typename V>
 struct void_pointer_base {
-    V* addr_;
+    V* addr_ = nullptr;
 
     template <typename U>
     void_pointer_base(U* addr) : addr_(addr)
@@ -194,7 +201,7 @@ struct void_pointer_base {
 
 template <typename V>
     requires std::is_void_v<V>
-struct pointer<V> : detail::void_pointer_base<V> {
+struct TCB_PTR_GSL_POINTER(V) pointer<V> : detail::void_pointer_base<V> {
 private:
     explicit pointer(std::nullptr_t) : detail::void_pointer_base<V>((V*)nullptr) { }
 
@@ -273,7 +280,7 @@ public:
 namespace detail {
 
 template <typename T>
-struct checked_iterator {
+struct TCB_PTR_GSL_POINTER(T) checked_iterator {
 private:
     T* start_ = nullptr;
     std::ptrdiff_t pos_ = 0;
@@ -307,6 +314,7 @@ public:
     checked_iterator(checked_iterator&&) = default;
     auto operator=(checked_iterator const&) -> checked_iterator& = default;
     auto operator=(checked_iterator&&) -> checked_iterator& = default;
+    ~checked_iterator() = default;
 
     constexpr auto operator*() const -> reference
     {
@@ -436,7 +444,7 @@ constexpr auto make_end_iterator(T* addr, std::size_t size) -> contiguous_iterat
 
 template <typename T>
     requires(std::is_object_v<T> && !std::is_const_v<T>)
-struct slice {
+struct TCB_PTR_GSL_POINTER(T) slice {
 private:
     T* addr_;
     std::size_t sz_;
@@ -579,16 +587,19 @@ template <typename R>
 concept pointer_compatible_range = std::ranges::borrowed_range<R>
     && std::ranges::contiguous_range<R> && std::ranges::sized_range<R>;
 
-}
+} // namespace detail
 
 template <typename T>
     requires std::is_object_v<T>
-struct pointer<T[]> {
+struct TCB_PTR_GSL_POINTER(T) pointer<T[]> {
 private:
     using slice_type = slice<std::remove_const_t<T>>;
     mutable slice_type slice_ = slice_type(nullptr, 0);
 
     friend class std::optional<pointer<T[]>>;
+
+    // Secret nullptr constructor for use by optional
+    constexpr pointer(std::nullptr_t) noexcept { }
 
     constexpr explicit pointer(T* ptr, std::size_t sz)
         : slice_(const_cast<std::remove_const_t<T>*>(ptr), sz)
@@ -597,10 +608,6 @@ private:
 
 public:
     using element_type = std::conditional_t<std::is_const_v<T>, slice_type const, slice_type>;
-
-    pointer() = default;
-
-    constexpr pointer(std::nullptr_t) noexcept { }
 
     template <detail::pointer_compatible_range R>
         requires std::convertible_to<
@@ -615,9 +622,8 @@ public:
     static constexpr auto from_address_with_size(U* ptr TCB_PTR_LIFETIME_BOUND, std::size_t sz)
         -> pointer
     {
-        if (ptr == nullptr && sz != 0) {
-            TCB_PTR_RUNTIME_ERROR(
-                "Null pointer with non-zero size passed to from_address_with_size()");
+        if (ptr == nullptr) {
+            TCB_PTR_RUNTIME_ERROR("Null pointer passed to from_address_with_size()");
         }
         return pointer(ptr, sz);
     }
@@ -834,7 +840,6 @@ struct hash<tcb::pointer<T>> {
 // MARK: std::optional
 
 template <typename T>
-    requires(!std::is_unbounded_array_v<T>)
 class optional<tcb::pointer<T>> {
 private:
     tcb::pointer<T> ptr_;

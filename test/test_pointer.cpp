@@ -100,14 +100,8 @@ constexpr bool test_pointer_static_properties()
         static_assert(sizeof(P) == sizeof(T*));
     }
 
-    // pointer<T> is not default constructible unless T is an unbounded array type
-    if constexpr (not std::is_unbounded_array_v<T>) {
-        static_assert(not std::is_default_constructible_v<P>);
-        static_assert(not std::default_initializable<P>);
-    } else {
-        static_assert(std::is_default_constructible_v<P>);
-        static_assert(std::default_initializable<P>);
-    }
+    static_assert(not std::is_default_constructible_v<P>);
+    static_assert(not std::default_initializable<P>);
 
     // pointer<T> is copyable, movable, etc (type traits)
     static_assert(std::is_copy_constructible_v<P>);
@@ -993,11 +987,7 @@ constexpr bool test_array_pointer()
         auto ptr3 = pointer<int[]>::from_address_with_size(array, 0);
         REQUIRE(ptr3->data() == array && ptr3->size() == 0);
 
-        // Can create an array of size zero passing a null pointer (but not nullptr directly)
-        auto ptr4 = pointer<int[]>::from_address_with_size((int*)nullptr, 0);
-        REQUIRE(ptr4->data() == nullptr && ptr4->size() == 0);
-
-        // Passing a null pointer with a non-zero size is a runtime error
+        // Passing a null pointer is a runtime error
         if (!std::is_constant_evaluated()) {
             REQUIRE_ERROR(pointer<int[]>::from_address_with_size((int*)nullptr, 1));
         }
@@ -1020,25 +1010,13 @@ constexpr bool test_array_pointer()
         auto ptr3 = pointer<int const[]>::from_address_with_size(array, 0);
         REQUIRE(ptr3->data() == array && ptr3->size() == 0);
 
-        // Can create an array of size zero passing a null pointer (but not nullptr directly)
-        auto ptr4 = pointer<int const[]>::from_address_with_size((int const*)nullptr, 0);
-        REQUIRE(ptr4->data() == nullptr && ptr4->size() == 0);
-
-        // Passing a null pointer with a non-zero size is a runtime error
+        // Passing a null pointer is a runtime error
         if (!std::is_constant_evaluated()) {
             REQUIRE_ERROR(pointer<int const[]>::from_address_with_size((int const*)nullptr, 1));
         }
     }
 
-    // default/nullptr constructors:
-    {
-        tcb::pointer<int[]> p;
-        REQUIRE(p->data() == nullptr && p->size() == 0);
-
-        REQUIRE(p == nullptr);
-    }
-
-    // other constructors etc
+    // constructors etc
     {
         std::array arr1{1, 2, 3, 4, 5};
         std::array arr2{6, 7, 8, 9, 10};
@@ -1590,6 +1568,31 @@ constexpr bool test_std_optional_specialisation()
         auto p = tcb::pointer_to_mut_array(o1);
         std::ranges::fill(*p | std::views::transform([](auto p) -> int& { return *p; }), 1000);
         REQUIRE(i == 1000);
+    }
+
+    // optional<pointer<T[]>> works correctly
+    {
+        using Opt = std::optional<tcb::pointer<int[]>>;
+        REQUIRE(sizeof(Opt) == sizeof(tcb::pointer<int[]>));
+
+        Opt opt{};
+        REQUIRE(not opt.has_value());
+
+        std::array arr{1, 2, 3, 4, 5};
+
+        opt = tcb::pointer_to_mut_array(arr);
+
+        REQUIRE(opt.has_value());
+        REQUIRE(&(*opt)->at(0) == &arr[0]);
+
+        // Now this is some fun
+        auto deref = [](auto& ptr) -> auto& { return *ptr; };
+
+        auto view = opt | std::views::transform(deref) | std::views::join;
+
+        std::ranges::fill(view, 99);
+
+        REQUIRE(std::ranges::all_of(arr, [](int i) { return i == 99; }));
     }
 
     return true;
