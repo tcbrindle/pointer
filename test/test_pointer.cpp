@@ -1590,7 +1590,9 @@ constexpr bool test_std_optional_specialisation()
 
         auto view = opt | std::views::transform(deref) | std::views::join;
 
-        std::ranges::fill(view, 99);
+        for (int& i : view) {
+            i = 99;
+        }
 
         REQUIRE(std::ranges::all_of(arr, [](int i) { return i == 99; }));
     }
