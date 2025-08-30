@@ -16,6 +16,14 @@ struct ptr_runtime_error : std::runtime_error {
  * MARK: Test machinery
  */
 
+// Clang 19 and earlier with libstdc++ seems to have a bug when
+// using spaceship with pointers in constexpr
+#if defined(__clang_major__) && defined(__GLIBCXX__)
+constexpr bool clang19_with_libstdcxx = (__clang_major__ < 20);
+#else
+constexpr bool clang19_with_libstdcxx = false;
+#endif
+
 struct test_failure : std::runtime_error {
     using std::runtime_error::runtime_error;
 };
@@ -393,7 +401,7 @@ constexpr bool test_pointer_to_object()
     }
 
     // Comparisons
-    {
+    if constexpr (!clang19_with_libstdcxx) {
         std::array arr{1, 2, 3, 4, 5};
 
         auto p0 = tcb::pointer_to(arr[0]);
@@ -1077,7 +1085,7 @@ constexpr bool test_array_pointer()
     }
 
     // pointer<T[]> ordering
-    {
+    if constexpr (!clang19_with_libstdcxx) {
         std::array<std::array<int, 3>, 2> arrays{std::array<int, 3>{1, 2, 3},
                                                  std::array<int, 3>{4, 5, 6}};
 
@@ -1349,7 +1357,7 @@ constexpr bool test_std_optional_specialisation()
         REQUIRE(**o2b == 0);
 
         Opt3 o3 = ConvertibleToPointer{.ptr = &i};
-        Opt1 o1b = o3;
+        [[maybe_unused]] Opt1 o1b = o3;
     }
 
     // Converting move constructor
@@ -1573,7 +1581,7 @@ constexpr bool test_std_optional_specialisation()
     // optional<pointer<T[]>> works correctly
     {
         using Opt = std::optional<tcb::pointer<int[]>>;
-        REQUIRE(sizeof(Opt) == sizeof(tcb::pointer<int[]>));
+        static_assert(sizeof(Opt) == sizeof(tcb::pointer<int[]>));
 
         Opt opt{};
         REQUIRE(not opt.has_value());
@@ -1585,12 +1593,7 @@ constexpr bool test_std_optional_specialisation()
         REQUIRE(opt.has_value());
         REQUIRE(&(*opt)->at(0) == &arr[0]);
 
-        // Now this is some fun
-        auto deref = [](auto& ptr) -> auto& { return *ptr; };
-
-        auto view = opt | std::views::transform(deref) | std::views::join;
-
-        std::ranges::fill(view, 99);
+        std::ranges::fill(**opt, 99);
 
         REQUIRE(std::ranges::all_of(arr, [](int i) { return i == 99; }));
     }
