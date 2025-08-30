@@ -46,6 +46,7 @@ jobs:
               brew install llvm@20 ninja
           - compiler: LLVM-Clang-21
             cxx: $(brew --prefix llvm@21)/bin/clang++
+            ldflags: -L$(brew --prefix llvm@21)/lib/c++
             install: |
               brew update
               brew install llvm@21 ninja
@@ -63,6 +64,7 @@ jobs:
       working-directory: ${{runner.workspace}}/build
       run: |
         cmake -GNinja -DCMAKE_BUILD_TYPE=${{matrix.build_type}} -DCMAKE_CXX_COMPILER=${{matrix.cxx}} \
+               -DCMAKE_EXE_LINKER_FLAGS=${{matrix.ldflags}} \
                $GITHUB_WORKSPACE
 
     - name: Build
