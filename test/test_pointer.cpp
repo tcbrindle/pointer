@@ -16,6 +16,14 @@ struct ptr_runtime_error : std::runtime_error {
  * MARK: Test machinery
  */
 
+// Clang 19 and earlier with libstdc++ seems to have a bug when
+// using spaceship with pointers in constexpr
+#if defined(__clang_major__) && defined(__GLIBCXX__)
+constexpr bool clang19_with_libstdcxx = (__clang_major__ < 20);
+#else
+constexpr bool clang19_with_libstdcxx = false;
+#endif
+
 struct test_failure : std::runtime_error {
     using std::runtime_error::runtime_error;
 };
@@ -393,7 +401,7 @@ constexpr bool test_pointer_to_object()
     }
 
     // Comparisons
-    {
+    if constexpr (!clang19_with_libstdcxx) {
         std::array arr{1, 2, 3, 4, 5};
 
         auto p0 = tcb::pointer_to(arr[0]);
@@ -1077,7 +1085,7 @@ constexpr bool test_array_pointer()
     }
 
     // pointer<T[]> ordering
-    {
+    if constexpr (!clang19_with_libstdcxx) {
         std::array<std::array<int, 3>, 2> arrays{std::array<int, 3>{1, 2, 3},
                                                  std::array<int, 3>{4, 5, 6}};
 
