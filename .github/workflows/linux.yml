@@ -12,57 +12,54 @@ jobs:
     strategy:
       matrix:
         compiler: [GCC-13, GCC-14, GCC-15, Clang-17, Clang-18, Clang-19, Clang-20, Clang-21]
-        #test_with: [Headers, Module]
         build_type: [Debug, Release]
-
-        #exclude:
-        #  - compiler: GCC-13
-        #    test_with: Module
-        #  - compiler: GCC-14
-        #    test_with: Module
-        #  - compiler: GCC-15
-        #    test_with: Module
-        #  - compiler: Clang-17
-        #    test_with: Module
 
         include:
           - compiler: GCC-13
             cxx: g++-13
+            build_module: false
             install: |
               brew install gcc@13 ninja binutils
               brew link --force binutils
           - compiler: GCC-14
             cxx: g++-14
+            build_module: false
             install: |
               brew install gcc@14 ninja binutils
               brew link --force binutils
           - compiler: GCC-15
             cxx: g++-15
+            build_module: true
             install: |
               brew install gcc@15 ninja binutils
               brew link --force binutils
           - compiler: Clang-17
             cxx: $(brew --prefix llvm@17)/bin/clang++
+            build_module: true
             install: |
               brew install llvm@17 ninja binutils
               brew link --force binutils
           - compiler: Clang-18
             cxx: $(brew --prefix llvm@18)/bin/clang++
+            build_module: true
             install: |
               brew install llvm@18 ninja binutils
               brew link --force binutils
           - compiler: Clang-19
             cxx: $(brew --prefix llvm@19)/bin/clang++
+            build_module: true
             install: |
               brew install llvm@19 ninja binutils
               brew link --force binutils
           - compiler: Clang-20
             cxx: $(brew --prefix llvm@20)/bin/clang++
+            build_module: true
             install: |
               brew install llvm@20 ninja binutils
               brew link --force binutils
           - compiler: Clang-21
             cxx: $(brew --prefix llvm@21)/bin/clang++
+            build_module: true
             install: |
               brew install llvm@21 ninja binutils
               brew link --force binutils
@@ -82,6 +79,7 @@ jobs:
       working-directory: ${{runner.workspace}}/build
       run: |
         cmake -GNinja -DCMAKE_BUILD_TYPE=${{matrix.build_type}} -DCMAKE_CXX_COMPILER=${{matrix.cxx}} \
+              -DTCB_POINTER_BUILD_MODULE=${{matrix.build_module}} \
               $GITHUB_WORKSPACE
 
     - name: Build
