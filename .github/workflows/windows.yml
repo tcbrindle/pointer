@@ -31,6 +31,7 @@ jobs:
       run: |
         cmake -G Ninja \
               -DCMAKE_BUILD_TYPE=${{matrix.build_type}} \
+              -DTCB_POINTER_BUILD_MODULE=On \
               $GITHUB_WORKSPACE
 
     - name: Build

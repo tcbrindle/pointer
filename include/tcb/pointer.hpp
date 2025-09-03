@@ -1,9 +1,10 @@
-
 #ifndef TCB_PTR_HPP_INCLUDED
 #define TCB_PTR_HPP_INCLUDED
 
 /*
 Copyright (c) 2025 Tristan Brindle (tcbrindle at gmail dot com)
+
+Boost Software License - Version 1.0 - August 17th, 2003
 
 Permission is hereby granted, free of charge, to any person or organization
 obtaining a copy of the software and accompanying documentation covered by
@@ -241,8 +242,13 @@ public:
     auto type() const -> std::type_info const& { return *this->type_; }
 #endif
 
+    explicit operator V*() const { return this->addr_; }
+
     template <typename U>
-        requires(std::is_object_v<U> && !std::is_unbounded_array_v<U>)
+        requires(std::is_object_v<U> && !std::is_unbounded_array_v<U> &&
+                requires(V* addr) {
+                    { static_cast<U*>(addr) };
+                })
     explicit operator pointer<U>() const
     {
 #if TCB_PTR_RTTI_ENABLED
@@ -254,7 +260,9 @@ public:
     }
 
     template <typename U>
-        requires std::is_object_v<U>
+        requires std::is_object_v<U> && requires(V* addr) {
+            { static_cast<U*>(addr) };
+        }
     explicit operator U*() const
     {
 #if TCB_PTR_RTTI_ENABLED

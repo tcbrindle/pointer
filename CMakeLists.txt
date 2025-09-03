@@ -2,16 +2,31 @@ cmake_minimum_required(VERSION 3.23)
 
 project(tcb_pointer CXX)
 
-add_library(tcb_pointer INTERFACE)
-target_sources(tcb_pointer INTERFACE
-    FILE_SET HEADERS
-    BASE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}
-    FILES pointer.hpp)
-target_compile_features(tcb_pointer INTERFACE cxx_std_20)
+option(TCB_POINTER_BUILD_TESTS "Build tests" ${PROJECT_IS_TOP_LEVEL})
+option(TCB_POINTER_BUILD_MODULE "Build C++20 module" Off)
 
+if(TCB_POINTER_BUILD_MODULE)
+    add_library(tcb_pointer)
+else()
+    add_library(tcb_pointer INTERFACE)
+endif()
 add_library(tcb::pointer ALIAS tcb_pointer)
 
-option(TCB_POINTER_BUILD_TESTS "Build tests" ${PROJECT_IS_TOP_LEVEL})
+target_sources(tcb_pointer PUBLIC
+    FILE_SET HEADERS
+    BASE_DIRS include
+    FILES include/tcb/pointer.hpp)
+target_compile_features(tcb_pointer INTERFACE cxx_std_20)
+
+if(TCB_POINTER_BUILD_MODULE)
+    target_sources(tcb_pointer PUBLIC
+        FILE_SET CXX_MODULES
+        BASE_DIRS module
+        FILES module/pointer.cpp
+    )
+    target_compile_features(tcb_pointer PUBLIC cxx_std_20)
+endif()
+
 
 if (TCB_POINTER_BUILD_TESTS)
     enable_testing()
