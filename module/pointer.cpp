@@ -1,41 +1,30 @@
 module;
 
-#include <tcb/pointer.hpp>
+#include <algorithm>
+#include <compare>
+#include <concepts>
+#include <cstddef>
+#include <functional>
+#include <memory>
+#include <optional>
+#include <ranges>
+#include <stdexcept>
+#include <typeinfo>
+#include <type_traits>
+
+#ifndef NDEBUG
+#    include <cstdio>
+#    include <exception>
+#endif
+
+#ifdef _MSC_VER
+#    include <intrin.h> // for __fastfail
+#endif
 
 export module tcb.pointer;
 
-export namespace tcb {
+#define TCB_PTR_BUILDING_MODULE
 
-// Public classes
-using tcb::pointer;
-using tcb::slice;
-
-// Public type aliases
-using tcb::array_pointer;
-using tcb::ptr;
-
-// Public function objects
-using tcb::const_pointer_cast_t;
-using tcb::dynamic_pointer_cast_t;
-using tcb::pointer_to_array_t;
-using tcb::pointer_to_mut_array_t;
-using tcb::pointer_to_mut_t;
-using tcb::pointer_to_t;
-using tcb::static_pointer_cast_t;
-using tcb::to_address_t;
-
-// Public functions
-using tcb::const_pointer_cast;
-using tcb::dynamic_pointer_cast;
-using tcb::pointer_to;
-using tcb::pointer_to_array;
-using tcb::pointer_to_mut;
-using tcb::pointer_to_mut_array;
-using tcb::ptr_to;
-using tcb::ptr_to_array;
-using tcb::ptr_to_mut;
-using tcb::ptr_to_mut_array;
-using tcb::static_pointer_cast;
-using tcb::to_address;
-
-} // namespace tcb
+extern "C++" {
+#include "tcb/pointer.hpp"
+}

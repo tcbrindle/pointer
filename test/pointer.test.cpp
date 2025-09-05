@@ -1,16 +1,20 @@
 
+#include <algorithm>
 #include <array>
+#include <cstdint>
+#include <functional>
+#include <optional>
 #include <ranges>
 #include <stdexcept>
 #include <unordered_set>
 #include <utility>
 #include <vector>
 
-struct ptr_runtime_error : std::runtime_error {
-    using std::runtime_error::runtime_error;
-};
-#define TCB_PTR_RUNTIME_ERROR(msg) throw ptr_runtime_error(msg)
-#include <tcb/pointer.hpp>
+#ifdef MODULE_BUILD
+import tcb.pointer;
+#else
+#    include <tcb/pointer.hpp>
+#endif
 
 /*
  * MARK: Test machinery
@@ -558,10 +562,14 @@ static bool test_pointer_to_void()
  * MARK: Checked iter tests
  */
 
+// checked_iterator is not exported from the module
+template <typename T>
+using checked_iterator_t = decltype(std::declval<tcb::pointer<T[]>&>()->begin());
+
 constexpr bool test_checked_iterator()
 {
-    using Iter = tcb::detail::checked_iterator<int>;
-    using CIter = tcb::detail::checked_iterator<int const>;
+    using Iter = checked_iterator_t<int>;
+    using CIter = checked_iterator_t<int const>;
 
     static_assert(std::contiguous_iterator<Iter>);
     static_assert(std::same_as<std::iter_value_t<Iter>, int>);
@@ -633,7 +641,7 @@ static_assert(test_checked_iterator());
 
 bool test_checked_iterator_bounds_checking()
 {
-    using Iter = tcb::detail::checked_iterator<int>;
+    using Iter = checked_iterator_t<int>;
 
     std::array arr{1, 2, 3, 4, 5};
 
