@@ -1,5 +1,3 @@
-#ifndef TCB_PTR_HPP_INCLUDED
-#define TCB_PTR_HPP_INCLUDED
 
 /*
 Copyright (c) 2025 Tristan Brindle (tcbrindle at gmail dot com)
@@ -28,6 +26,13 @@ FOR ANY DAMAGES OR OTHER LIABILITY, WHETHER IN CONTRACT, TORT OR OTHERWISE,
 ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 */
+
+#ifndef TCB_PTR_HPP_INCLUDED
+#define TCB_PTR_HPP_INCLUDED
+
+#ifdef TCB_PTR_CONFIG_HEADER
+#    include TCB_PTR_CONFIG_HEADER
+#endif
 
 #include <algorithm> // for std::ranges::equal, std::lexicographical_compare_three_way
 #include <compare> // for std::strong_ordering
