@@ -1,5 +1,3 @@
-#ifndef TCB_PTR_HPP_INCLUDED
-#define TCB_PTR_HPP_INCLUDED
 
 /*
 Copyright (c) 2025 Tristan Brindle (tcbrindle at gmail dot com)
@@ -29,30 +27,38 @@ ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 */
 
-#include <algorithm> // for std::ranges::equal, std::lexicographical_compare_three_way
-#include <compare> // for std::strong_ordering
-#include <concepts>
-#include <cstddef>
-#include <functional> // for std::invoke
-#include <memory> // for std::addressof
-#include <optional> // for std::optional<pointer>
-#include <ranges> // for std::ranges::contiguous_range etc
-#include <stdexcept> // for std::out_of_range
-#include <typeinfo>
-#include <type_traits>
+#ifndef TCB_PTR_HPP_INCLUDED
+#define TCB_PTR_HPP_INCLUDED
 
-#ifndef NDEBUG
-#    include <cstdio>
-#    include <exception>
+#ifdef TCB_PTR_CONFIG_HEADER
+#    include TCB_PTR_CONFIG_HEADER
 #endif
 
-#ifdef _MSC_VER
-#    include <intrin.h> // for __fastfail
-#endif
+#ifdef TCB_PTR_BUILDING_MODULE
+#    define TCB_PTR_EXPORT export
+#else
+#    define TCB_PTR_EXPORT
+#    include <algorithm> // for std::ranges::equal, std::lexicographical_compare_three_way
+#    include <compare> // for std::strong_ordering
+#    include <concepts>
+#    include <cstddef>
+#    include <functional> // for std::invoke
+#    include <memory> // for std::addressof
+#    include <optional> // for std::optional<pointer>
+#    include <ranges> // for std::ranges::contiguous_range etc
+#    include <stdexcept> // for std::out_of_range
+#    include <typeinfo>
+#    include <type_traits>
 
-namespace tcb {
+#    ifndef NDEBUG
+#        include <cstdio>
+#        include <exception>
+#    endif
 
-namespace detail {
+#    ifdef _MSC_VER
+#        include <intrin.h> // for __fastfail
+#    endif
+#endif // TCB_PTR_BUILDING_MODULE
 
 #if __has_cpp_attribute(clang::lifetimebound)
 #    define TCB_PTR_LIFETIME_BOUND [[clang::lifetimebound]]
@@ -100,11 +106,11 @@ namespace detail {
 #    define TCB_PTR_THROW(ex) TCB_PTR_RUNTIME_ERROR(ex.what())
 #endif
 
-} // namespace detail
+namespace tcb {
 
 // MARK: Object pointer
 
-template <typename>
+TCB_PTR_EXPORT template <typename>
 struct pointer;
 
 template <typename T>
@@ -450,7 +456,7 @@ constexpr auto make_end_iterator(T* addr, std::size_t size) -> contiguous_iterat
 
 // MARK: Slice
 
-template <typename T>
+TCB_PTR_EXPORT template <typename T>
     requires(std::is_object_v<T> && !std::is_const_v<T>)
 struct TCB_PTR_GSL_POINTER(T) slice {
 private:
@@ -689,11 +695,12 @@ public:
     }
 };
 
-template <typename T>
+TCB_PTR_EXPORT template <typename T>
 using array_pointer = pointer<T[]>;
 
 // MARK: Functions
 
+TCB_PTR_EXPORT
 struct pointer_to_t {
     template <typename T>
     constexpr auto operator()(T const& obj TCB_PTR_LIFETIME_BOUND) const -> pointer<T const>
@@ -705,6 +712,7 @@ struct pointer_to_t {
     void operator()(T const&&) const = delete;
 };
 
+TCB_PTR_EXPORT
 struct pointer_to_mut_t {
     template <typename T>
         requires(!std::is_const_v<T>)
@@ -714,6 +722,7 @@ struct pointer_to_mut_t {
     }
 };
 
+TCB_PTR_EXPORT
 struct pointer_to_array_t {
     template <typename R>
         requires detail::pointer_compatible_range<R>
@@ -725,6 +734,7 @@ struct pointer_to_array_t {
     }
 };
 
+TCB_PTR_EXPORT
 struct pointer_to_mut_array_t {
     template <typename R>
         requires detail::pointer_compatible_range<R>
@@ -737,6 +747,7 @@ struct pointer_to_mut_array_t {
     }
 };
 
+TCB_PTR_EXPORT
 struct to_address_t {
     template <typename T>
     constexpr auto operator()(pointer<T> ptr) const noexcept -> typename pointer<T>::element_type*
@@ -745,7 +756,7 @@ struct to_address_t {
     }
 };
 
-template <typename To>
+TCB_PTR_EXPORT template <typename To>
 struct static_pointer_cast_t {
     template <typename From>
         requires requires(From* from) {
@@ -763,7 +774,7 @@ struct static_pointer_cast_t {
     }
 };
 
-template <typename To>
+TCB_PTR_EXPORT template <typename To>
 struct const_pointer_cast_t {
     template <typename From>
         requires requires(From* from) {
@@ -781,7 +792,7 @@ struct const_pointer_cast_t {
     }
 };
 
-template <typename Derived>
+TCB_PTR_EXPORT template <typename Derived>
 struct dynamic_pointer_cast_t {
     template <typename Base>
         requires requires(Base* base) {
@@ -798,26 +809,29 @@ struct dynamic_pointer_cast_t {
     }
 };
 
-inline constexpr auto pointer_to = pointer_to_t{};
-inline constexpr auto pointer_to_mut = pointer_to_mut_t{};
-inline constexpr auto pointer_to_array = pointer_to_array_t{};
-inline constexpr auto pointer_to_mut_array = pointer_to_mut_array_t{};
-inline constexpr auto to_address = to_address_t{};
-template <typename To>
+TCB_PTR_EXPORT inline constexpr auto pointer_to = pointer_to_t{};
+TCB_PTR_EXPORT inline constexpr auto pointer_to_mut = pointer_to_mut_t{};
+TCB_PTR_EXPORT inline constexpr auto pointer_to_array = pointer_to_array_t{};
+TCB_PTR_EXPORT inline constexpr auto pointer_to_mut_array = pointer_to_mut_array_t{};
+TCB_PTR_EXPORT inline constexpr auto to_address = to_address_t{};
+
+TCB_PTR_EXPORT template <typename To>
 inline constexpr auto static_pointer_cast = static_pointer_cast_t<To>{};
-template <typename To>
+
+TCB_PTR_EXPORT template <typename To>
 inline constexpr auto const_pointer_cast = const_pointer_cast_t<To>{};
-template <typename Derived>
+
+TCB_PTR_EXPORT template <typename Derived>
 inline constexpr auto dynamic_pointer_cast = dynamic_pointer_cast_t<Derived>{};
 
 // Slightly shortened aliases
-template <typename T>
+TCB_PTR_EXPORT template <typename T>
 using ptr = pointer<T>;
 
-inline constexpr auto& ptr_to = pointer_to;
-inline constexpr auto& ptr_to_mut = pointer_to_mut;
-inline constexpr auto& ptr_to_array = pointer_to_array;
-inline constexpr auto& ptr_to_mut_array = pointer_to_mut_array;
+TCB_PTR_EXPORT inline constexpr auto& ptr_to = pointer_to;
+TCB_PTR_EXPORT inline constexpr auto& ptr_to_mut = pointer_to_mut;
+TCB_PTR_EXPORT inline constexpr auto& ptr_to_array = pointer_to_array;
+TCB_PTR_EXPORT inline constexpr auto& ptr_to_mut_array = pointer_to_mut_array;
 
 } // namespace tcb
 

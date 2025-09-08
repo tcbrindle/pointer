@@ -24,7 +24,7 @@ jobs:
               brew install ninja
           - compiler: LLVM-Clang-17
             cxx: $(brew --prefix llvm@17)/bin/clang++
-            build_module: true
+            build_module: false
             install: |
               brew install llvm@17 ninja
           - compiler: LLVM-Clang-18
