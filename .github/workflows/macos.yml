@@ -16,6 +16,8 @@ jobs:
       matrix:
         compiler: [AppleClang, LLVM-Clang-17, LLVM-Clang-18, LLVM-Clang-19, LLVM-Clang-20, LLVM-Clang-21]
         build_type: [Debug, Release]
+        env:
+          - CXXFLAGS: -Wall -Wextra -Wconversion -Wsign-conversion -pedantic -fno-omit-frame-pointer
 
         include:
           - compiler: AppleClang
@@ -58,22 +60,22 @@ jobs:
     - name: Create Build Environment
       run: |
         ${{matrix.install}}
-        cmake -E make_directory ${{runner.workspace}}/build
 
     - name: Configure
-      working-directory: ${{runner.workspace}}/build
       run: |
-        cmake -GNinja -DCMAKE_BUILD_TYPE=${{matrix.build_type}} -DCMAKE_CXX_COMPILER=${{matrix.cxx}} \
-               -DCMAKE_EXE_LINKER_FLAGS=${{matrix.ldflags}} \
-               -DTCB_POINTER_BUILD_MODULE=${{matrix.build_module}} \
-               $GITHUB_WORKSPACE
+        cmake -B build -GNinja \
+              -DCMAKE_BUILD_TYPE=${{matrix.build_type}} \
+              -DCMAKE_CXX_COMPILER=${{matrix.cxx}} \
+              -DCMAKE_EXE_LINKER_FLAGS=${{matrix.ldflags}} \
+              -DCMAKE_COMPILE_WARNING_AS_ERROR=On \
+              -DCMAKE_LINK_WARNING_AS_ERROR=On \
+              -DTCB_POINTER_BUILD_MODULE=${{matrix.build_module}}
 
     - name: Build
-      working-directory: ${{runner.workspace}}/build
-      run: cmake --build . --config ${{matrix.build_type}}
+      run: cmake --build build --config ${{matrix.build_type}}
 
     - name: Test
-      working-directory: ${{runner.workspace}}/build
+      working-directory: ${{github.workspace}}/build
       run: ctest -C ${{matrix.build_type}}
       env:
         CTEST_OUTPUT_ON_FAILURE: True
