@@ -81,6 +81,7 @@ jobs:
         cmake -B build -GNinja \
               -DCMAKE_BUILD_TYPE=${{matrix.build_type}} \
               -DCMAKE_CXX_COMPILER=${{matrix.cxx}} \
+              -DCMAKE_CXX_EXTENSIONS=Off \
               -DCMAKE_COMPILE_WARNING_AS_ERROR=On \
               -DCMAKE_LINK_WARNING_AS_ERROR=On \
               -DTCB_POINTER_BUILD_MODULE=${{matrix.build_module}}
