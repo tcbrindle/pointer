@@ -1,13 +1,16 @@
 # Based on macos.yml from {fmt}
 # https://github.com/fmtlib/fmt/blob/master/.github/workflows/macos.yml
 
-name: macos
+name: MacOS CI
 
 on:
   push:
     branches:
       - main
   pull_request:
+
+env:
+  CXXFLAGS: -Wall -Wextra -Wconversion -Wsign-conversion -pedantic -fno-omit-frame-pointer
 
 jobs:
   build:
@@ -34,19 +37,19 @@ jobs:
               brew install llvm@18 ninja
           - compiler: LLVM-Clang-19
             cxx: $(brew --prefix llvm@19)/bin/clang++
-            build_module: true
+            build_module: false
             install: |
               brew install llvm@19 ninja
           - compiler: LLVM-Clang-20
             cxx: $(brew --prefix llvm@20)/bin/clang++
-            build_module: true
+            build_module: false
             install: |
               brew update
               brew install llvm@20 ninja
           - compiler: LLVM-Clang-21
             cxx: $(brew --prefix llvm@21)/bin/clang++
             ldflags: -L$(brew --prefix llvm@21)/lib/c++
-            build_module: true
+            build_module: false
             install: |
               brew update
               brew install llvm@21 ninja
@@ -58,22 +61,23 @@ jobs:
     - name: Create Build Environment
       run: |
         ${{matrix.install}}
-        cmake -E make_directory ${{runner.workspace}}/build
 
     - name: Configure
-      working-directory: ${{runner.workspace}}/build
       run: |
-        cmake -GNinja -DCMAKE_BUILD_TYPE=${{matrix.build_type}} -DCMAKE_CXX_COMPILER=${{matrix.cxx}} \
-               -DCMAKE_EXE_LINKER_FLAGS=${{matrix.ldflags}} \
-               -DTCB_POINTER_BUILD_MODULE=${{matrix.build_module}} \
-               $GITHUB_WORKSPACE
+        cmake -B build -GNinja \
+              -DCMAKE_BUILD_TYPE=${{matrix.build_type}} \
+              -DCMAKE_CXX_COMPILER=${{matrix.cxx}} \
+              -DCMAKE_EXE_LINKER_FLAGS=${{matrix.ldflags}} \
+              -DCMAKE_CXX_EXTENSIONS=Off \
+              -DCMAKE_COMPILE_WARNING_AS_ERROR=On \
+              -DCMAKE_LINK_WARNING_AS_ERROR=On \
+              -DTCB_POINTER_BUILD_MODULE=${{matrix.build_module}}
 
     - name: Build
-      working-directory: ${{runner.workspace}}/build
-      run: cmake --build . --config ${{matrix.build_type}}
+      run: cmake --build build --config ${{matrix.build_type}}
 
     - name: Test
-      working-directory: ${{runner.workspace}}/build
+      working-directory: ${{github.workspace}}/build
       run: ctest -C ${{matrix.build_type}}
       env:
         CTEST_OUTPUT_ON_FAILURE: True

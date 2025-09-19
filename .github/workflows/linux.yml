@@ -1,10 +1,13 @@
-name: linux
+name: Linux CI
 
 on:
   push:
     branches:
       - main
   pull_request:
+
+env:
+  CXXFLAGS: -Wall -Wextra -Wconversion -Wsign-conversion -pedantic -fno-omit-frame-pointer
 
 jobs:
   build:
@@ -73,21 +76,22 @@ jobs:
     - name: Create Build Environment
       run: |
         ${{matrix.install}}
-        cmake -E make_directory ${{runner.workspace}}/build
 
     - name: Configure
-      working-directory: ${{runner.workspace}}/build
       run: |
-        cmake -GNinja -DCMAKE_BUILD_TYPE=${{matrix.build_type}} -DCMAKE_CXX_COMPILER=${{matrix.cxx}} \
-              -DTCB_POINTER_BUILD_MODULE=${{matrix.build_module}} \
-              $GITHUB_WORKSPACE
+        cmake -B build -GNinja \
+              -DCMAKE_BUILD_TYPE=${{matrix.build_type}} \
+              -DCMAKE_CXX_COMPILER=${{matrix.cxx}} \
+              -DCMAKE_CXX_EXTENSIONS=Off \
+              -DCMAKE_COMPILE_WARNING_AS_ERROR=On \
+              -DCMAKE_LINK_WARNING_AS_ERROR=On \
+              -DTCB_POINTER_BUILD_MODULE=${{matrix.build_module}}
 
     - name: Build
-      working-directory: ${{runner.workspace}}/build
-      run: cmake --build .
+      run: cmake --build build
 
     - name: Test
-      working-directory: ${{runner.workspace}}/build
+      working-directory: ${{github.workspace}}/build
       run: ctest -C ${{matrix.build_type}}
       env:
         CTEST_OUTPUT_ON_FAILURE: True
