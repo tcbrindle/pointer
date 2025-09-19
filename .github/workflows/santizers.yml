@@ -28,23 +28,22 @@ jobs:
       - name: Create Build Environment
         run: |
           ${{matrix.install}}
-          cmake -E make_directory ${{runner.workspace}}/build
 
       - name: Configure
-        working-directory: ${{runner.workspace}}/build
         run: |
-          cmake -GNinja \
+          cmake -B build -GNinja \
                 -DCMAKE_CXX_COMPILER=g++-15 \
+                -DCMAKE_CXX_EXTENSIONS=Off \
+                -DCMAKE_BUILD_TYPE=${{matrix.build_type}} \
                 -DCMAKE_CXX_FLAGS="-fsanitize=${{matrix.sanitizer}}" \
                 -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=${{matrix.sanitizer}}" \
                 $GITHUB_WORKSPACE
 
       - name: Build
-        working-directory: ${{runner.workspace}}/build
-        run: cmake --build .
+        run: cmake --build build
 
       - name: Test
-        working-directory: ${{runner.workspace}}/build
+        working-directory: ${{github.workspace}}/build
         run: ctest -C ${{matrix.build_type}}
         env:
           CTEST_OUTPUT_ON_FAILURE: True
