@@ -1,10 +1,13 @@
-name: windows
+name: Windows CI
 
 on:
   push:
     branches:
       - main
   pull_request:
+
+env:
+  CXXFLAGS: /utf-8 /Zc:__cplusplus /Zc:throwingNew /Zc:inline /Zc:externConstexpr /Zc:templateScope /Zc:checkGwOdr /Zc:enumTypes /W4
 
 jobs:
   build:
@@ -13,8 +16,6 @@ jobs:
       matrix:
         platform: [x86, x64]
         build_type: [Debug, Release]
-        env:
-          - CXXFLAGS: /utf-8 /Zc:__cplusplus /Zc:throwingNew /Zc:inline /Zc:externConstexpr /Zc:templateScope /Zc:checkGwOdr /Zc:enumTypes /W4
 
     steps:
     - uses: actions/checkout@master

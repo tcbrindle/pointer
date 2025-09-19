@@ -1,10 +1,13 @@
-name: linux
+name: Linux CI
 
 on:
   push:
     branches:
       - main
   pull_request:
+
+env:
+  CXXFLAGS: -Wall -Wextra -Wconversion -Wsign-conversion -pedantic -fno-omit-frame-pointer
 
 jobs:
   build:
@@ -13,8 +16,6 @@ jobs:
       matrix:
         compiler: [GCC-13, GCC-14, GCC-15, Clang-17, Clang-18, Clang-19, Clang-20, Clang-21]
         build_type: [Debug, Release]
-        env:
-          - CXXFLAGS: -Wall -Wextra -Wconversion -Wsign-conversion -pedantic -fno-omit-frame-pointer
 
         include:
           - compiler: GCC-13

@@ -1,13 +1,16 @@
 # Based on macos.yml from {fmt}
 # https://github.com/fmtlib/fmt/blob/master/.github/workflows/macos.yml
 
-name: macos
+name: MacOS CI
 
 on:
   push:
     branches:
       - main
   pull_request:
+
+env:
+  CXXFLAGS: -Wall -Wextra -Wconversion -Wsign-conversion -pedantic -fno-omit-frame-pointer
 
 jobs:
   build:
@@ -16,8 +19,6 @@ jobs:
       matrix:
         compiler: [AppleClang, LLVM-Clang-17, LLVM-Clang-18, LLVM-Clang-19, LLVM-Clang-20, LLVM-Clang-21]
         build_type: [Debug, Release]
-        env:
-          - CXXFLAGS: -Wall -Wextra -Wconversion -Wsign-conversion -pedantic -fno-omit-frame-pointer
 
         include:
           - compiler: AppleClang
