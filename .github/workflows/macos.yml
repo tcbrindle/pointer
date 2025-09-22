@@ -37,19 +37,19 @@ jobs:
               brew install llvm@18 ninja
           - compiler: LLVM-Clang-19
             cxx: $(brew --prefix llvm@19)/bin/clang++
-            build_module: false
+            build_module: true
             install: |
               brew install llvm@19 ninja
           - compiler: LLVM-Clang-20
             cxx: $(brew --prefix llvm@20)/bin/clang++
-            build_module: false
+            build_module: true
             install: |
               brew update
               brew install llvm@20 ninja
           - compiler: LLVM-Clang-21
             cxx: $(brew --prefix llvm@21)/bin/clang++
             ldflags: -L$(brew --prefix llvm@21)/lib/c++
-            build_module: false
+            build_module: true
             install: |
               brew update
               brew install llvm@21 ninja
