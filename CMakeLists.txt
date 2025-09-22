@@ -36,7 +36,7 @@ endif()
 
 if (TCB_POINTER_BUILD_TESTS)
     enable_testing()
-    add_subdirectory(test)
+    add_subdirectory(tests)
 endif()
 
 set(TCB_POINTER_INSTALL_CMAKE_DIR ${CMAKE_INSTALL_LIBDIR}/cmake/tcb.pointer)
