@@ -586,10 +586,23 @@ public:
     }
 
     friend constexpr auto operator<=>(slice const& lhs, slice const& rhs)
-        requires std::three_way_comparable<T>
+        requires std::totally_ordered<T>
     {
+        auto cmp = [](const_reference lhs, const_reference rhs) {
+            if constexpr (std::three_way_comparable<T>) {
+                return lhs <=> rhs;
+            } else {
+                if (lhs < rhs) {
+                    return std::weak_ordering::less;
+                } else if (rhs < lhs) {
+                    return std::weak_ordering::greater;
+                } else {
+                    return std::weak_ordering::equivalent;
+                }
+            }
+        };
         return std::lexicographical_compare_three_way(lhs.begin(), lhs.end(), rhs.begin(),
-                                                      rhs.end());
+                                                      rhs.end(), cmp);
     }
 };
 
@@ -827,6 +840,9 @@ inline constexpr auto dynamic_pointer_cast = dynamic_pointer_cast_t<Derived>{};
 // Slightly shortened aliases
 TCB_PTR_EXPORT template <typename T>
 using ptr = pointer<T>;
+
+TCB_PTR_EXPORT template <typename T>
+using array_ptr = pointer<T[]>;
 
 TCB_PTR_EXPORT inline constexpr auto& ptr_to = pointer_to;
 TCB_PTR_EXPORT inline constexpr auto& ptr_to_mut = pointer_to_mut;
