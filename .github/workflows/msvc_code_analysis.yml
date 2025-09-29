@@ -36,8 +36,10 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # Disable building examples to avoid uploading multiple SARIF files
+      # https://github.blog/changelog/2025-07-21-code-scanning-will-stop-combining-multiple-sarif-runs-uploaded-in-the-same-sarif-file/
       - name: Configure CMake
-        run: cmake -B ${{ env.build }}
+        run: cmake -B ${{ env.build }} -DTCB_POINTER_BUILD_EXAMPLES=Off
 
       # Build is not required unless generated source files are used
       # - name: Build CMake
