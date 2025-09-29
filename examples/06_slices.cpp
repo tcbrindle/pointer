@@ -88,8 +88,8 @@ void slices()
         float shorter[] = {1.0f, 2.0f, 3.0f};
         float longer[] = {1.0f, 2.0f, 3.0f, 4.0f};
 
-        tcb::ptr<float const[]> p_shorter = tcb::ptr_to(shorter);
-        tcb::ptr<float const[]> p_longer = tcb::ptr_to(longer);
+        [[maybe_unused]] tcb::ptr<float const[]> p_shorter = tcb::ptr_to(shorter);
+        [[maybe_unused]] tcb::ptr<float const[]> p_longer = tcb::ptr_to(longer);
 
         assert(*p_shorter < *p_longer);
         assert(*p_shorter <=> *p_longer == std::partial_ordering::less);

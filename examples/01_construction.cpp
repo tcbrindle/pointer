@@ -34,8 +34,8 @@ void pointer_construction()
     // auto error = tcb::pointer_to_mut(c);
 
     // If you're not a fan of typing, there are some shortened aliases:
-    tcb::ptr p5 = tcb::ptr_to(i);
-    tcb::ptr p6 = tcb::ptr_to_mut(i);
+    tcb::ptr<int const> p5 = tcb::ptr_to(i);
+    tcb::ptr<int> p6 = tcb::ptr_to_mut(i);
 
     // Alternatively you can use std::pointer_traits, if you're not
     // into the whole brevity thing
