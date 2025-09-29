@@ -8,7 +8,9 @@ project(tcb.pointer
 
 include(GNUInstallDirs)
 include(CMakePackageConfigHelpers)
+enable_testing()
 
+option(TCB_POINTER_BUILD_EXAMPLES "Build examples" ${PROJECT_IS_TOP_LEVEL})
 option(TCB_POINTER_BUILD_TESTS "Build tests" ${PROJECT_IS_TOP_LEVEL})
 option(TCB_POINTER_BUILD_MODULE "Build C++20 module" Off)
 
@@ -34,8 +36,11 @@ if(TCB_POINTER_BUILD_MODULE)
     add_library(tcb::pointer::module ALIAS tcb.pointer.module)
 endif()
 
+if (TCB_POINTER_BUILD_EXAMPLES)
+    add_subdirectory(examples)
+endif()
+
 if (TCB_POINTER_BUILD_TESTS)
-    enable_testing()
     add_subdirectory(tests)
 endif()
 
