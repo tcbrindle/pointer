@@ -29,6 +29,15 @@ constexpr bool clang19_with_libstdcxx = (__clang_major__ < 20);
 constexpr bool clang19_with_libstdcxx = false;
 #endif
 
+// MSVC seems to have a bug where NAN <=> NAN evaluates to
+// std::partial_ordering::less, not ::unordered as it should
+// See https://developercommunity.visualstudio.com/t/float-f--NAN;-f--f-gives-incorrect-r/10973680
+#if defined(_MSC_VER)
+constexpr bool compiler_is_msvc = true;
+#else
+constexpr bool compiler_is_msvc = false;
+#endif
+
 struct test_failure : std::runtime_error {
     using std::runtime_error::runtime_error;
 };
@@ -831,7 +840,7 @@ constexpr bool test_slice()
         REQUIRE(*p_shorter_array <=> *p_array == std::strong_ordering::less);
 
         // Float comparison should be partially ordered, and handle nans
-        {
+        if (!(compiler_is_msvc && std::is_constant_evaluated())) {
             float nan = std::numeric_limits<float>::quiet_NaN();
             float floats[] = {1.0f, nan, 3.0f};
             auto p_floats = tcb::ptr<float const[]>::pointer_to(floats);
