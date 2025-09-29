@@ -3,6 +3,7 @@
 #include <array>
 #include <cstdint>
 #include <functional>
+#include <limits>
 #include <optional>
 #include <ranges>
 #include <stdexcept>
@@ -26,6 +27,15 @@ import tcb.pointer;
 constexpr bool clang19_with_libstdcxx = (__clang_major__ < 20);
 #else
 constexpr bool clang19_with_libstdcxx = false;
+#endif
+
+// MSVC seems to have a bug where NAN <=> NAN evaluates to
+// std::partial_ordering::less, not ::unordered as it should
+// See https://developercommunity.visualstudio.com/t/float-f--NAN;-f--f-gives-incorrect-r/10973680
+#if defined(_MSC_VER)
+constexpr bool compiler_is_msvc = true;
+#else
+constexpr bool compiler_is_msvc = false;
 #endif
 
 struct test_failure : std::runtime_error {
@@ -740,6 +750,16 @@ constexpr bool test_slice_traits()
 }
 static_assert(test_slice_traits());
 
+struct no_spaceship {
+    int i;
+
+    constexpr bool operator==(no_spaceship other) const { return i == other.i; }
+    constexpr bool operator<(no_spaceship other) const { return i < other.i; }
+    constexpr bool operator>(no_spaceship other) const { return other < *this; }
+    constexpr bool operator<=(no_spaceship other) const { return !(*this > other); }
+    constexpr bool operator>=(no_spaceship other) const { return !(*this < other); }
+};
+
 constexpr bool test_slice()
 {
     // Basic slice functionality
@@ -818,6 +838,25 @@ constexpr bool test_slice()
         REQUIRE(*p_array <=> *p_same_array == std::strong_ordering::equal);
         REQUIRE(*p_array <=> *p_shorter_array == std::strong_ordering::greater);
         REQUIRE(*p_shorter_array <=> *p_array == std::strong_ordering::less);
+
+        // Float comparison should be partially ordered, and handle nans
+        if (!(compiler_is_msvc && std::is_constant_evaluated())) {
+            float nan = std::numeric_limits<float>::quiet_NaN();
+            float floats[] = {1.0f, nan, 3.0f};
+            auto p_floats = tcb::ptr<float const[]>::pointer_to(floats);
+            auto float_cmp = *p_floats <=> *p_floats;
+            static_assert(std::same_as<decltype(float_cmp), std::partial_ordering>);
+            REQUIRE(float_cmp == std::partial_ordering::unordered);
+        }
+
+        // We can compare types without a spaceship operator
+        {
+            no_spaceship ns[] = {{1}, {2}, {3}};
+            auto ptr = tcb::ptr_to_array(ns);
+            auto cmp = *ptr <=> *ptr;
+            static_assert(std::same_as<decltype(cmp), std::weak_ordering>);
+            REQUIRE(cmp == std::weak_ordering::equivalent);
+        }
     }
 
     // Bounds checking works correctly
