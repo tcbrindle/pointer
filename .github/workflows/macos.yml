@@ -71,6 +71,7 @@ jobs:
               -DCMAKE_CXX_EXTENSIONS=Off \
               -DCMAKE_COMPILE_WARNING_AS_ERROR=On \
               -DCMAKE_LINK_WARNING_AS_ERROR=On \
+              -DCMAKE_OSX_SYSROOT=$(xcrun --sdk macosx --show-sdk-path) \
               -DTCB_POINTER_BUILD_MODULE=${{matrix.build_module}}
 
     - name: Build
