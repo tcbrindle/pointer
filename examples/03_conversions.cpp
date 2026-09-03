@@ -34,7 +34,7 @@ void pointer_conversions()
     tcb::pointer<int> p3 = tcb::const_pointer_cast<int>(p2);
 
     // Similarly, we can implicitly convert from a pointer-to-derived
-    // to a pointer-to-base, as we'd expect:
+    // to an unambiguous pointer-to-base, as we'd expect:
     Derived d{};
     tcb::pointer<Base> p_base = tcb::ptr_to_mut(d);
 
