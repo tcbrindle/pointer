@@ -413,13 +413,15 @@ public:
         return lhs -= rhs;
     }
 
-    friend constexpr auto operator-(checked_iterator lhs, checked_iterator rhs) -> difference_type
+    friend constexpr auto operator-(checked_iterator const& lhs, checked_iterator const& rhs)
+        -> difference_type
     {
         return lhs.pos_ - rhs.pos_;
     }
 
-    friend auto operator==(checked_iterator, checked_iterator) -> bool = default;
-    friend auto operator<=>(checked_iterator, checked_iterator) -> std::strong_ordering = default;
+    friend auto operator==(checked_iterator const&, checked_iterator const&) -> bool = default;
+    friend auto operator<=>(checked_iterator const&, checked_iterator const&)
+        -> std::strong_ordering = default;
 };
 
 #ifndef TCB_PTR_USE_UNCHECKED_ITERATORS
