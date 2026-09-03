@@ -168,7 +168,7 @@ public:
 
     friend constexpr auto operator==(pointer lhs, pointer rhs) -> bool
     {
-        return lhs.addr_ == rhs.addr_;
+        return std::compare_three_way{}(lhs.addr_, rhs.addr_) == 0;
     }
 
     friend constexpr auto operator<=>(pointer lhs, pointer rhs) -> std::strong_ordering
