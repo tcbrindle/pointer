@@ -143,14 +143,11 @@ constexpr bool test_pointer_static_properties()
     static_assert(std::swappable<P>);
 
     // pointer<T> special members are all trivial
-    // (except array pointers, annoyingly)
-    if constexpr (not std::is_unbounded_array_v<T>) {
-        static_assert(std::is_trivially_copyable_v<P>);
-        static_assert(std::is_trivially_copy_constructible_v<P>);
-        static_assert(std::is_trivially_move_constructible_v<P>);
-        static_assert(std::is_trivially_copy_assignable_v<P>);
-        static_assert(std::is_trivially_move_assignable_v<P>);
-    }
+    static_assert(std::is_trivially_copyable_v<P>);
+    static_assert(std::is_trivially_copy_constructible_v<P>);
+    static_assert(std::is_trivially_move_constructible_v<P>);
+    static_assert(std::is_trivially_copy_assignable_v<P>);
+    static_assert(std::is_trivially_move_assignable_v<P>);
     static_assert(std::is_trivially_destructible_v<P>);
 
     // pointer<T> special members are all noexcept
@@ -1335,7 +1332,7 @@ constexpr bool test_std_optional_specialisation()
         static_assert(std::default_initializable<Opt>);
         static_assert(std::copy_constructible<Opt>);
         static_assert(std::move_constructible<Opt>);
-        // static_assert(std::copyable<Opt>);
+        static_assert(std::copyable<Opt>);
         static_assert(std::movable<Opt>);
         static_assert(std::destructible<Opt>);
     }

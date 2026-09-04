@@ -168,7 +168,7 @@ public:
 
     friend constexpr auto operator==(pointer lhs, pointer rhs) -> bool
     {
-        return lhs.addr_ == rhs.addr_;
+        return std::compare_three_way{}(lhs.addr_, rhs.addr_) == 0;
     }
 
     friend constexpr auto operator<=>(pointer lhs, pointer rhs) -> std::strong_ordering
@@ -413,13 +413,15 @@ public:
         return lhs -= rhs;
     }
 
-    friend constexpr auto operator-(checked_iterator lhs, checked_iterator rhs) -> difference_type
+    friend constexpr auto operator-(checked_iterator const& lhs, checked_iterator const& rhs)
+        -> difference_type
     {
         return lhs.pos_ - rhs.pos_;
     }
 
-    friend auto operator==(checked_iterator, checked_iterator) -> bool = default;
-    friend auto operator<=>(checked_iterator, checked_iterator) -> std::strong_ordering = default;
+    friend auto operator==(checked_iterator const&, checked_iterator const&) -> bool = default;
+    friend auto operator<=>(checked_iterator const&, checked_iterator const&)
+        -> std::strong_ordering = default;
 };
 
 #ifndef TCB_PTR_USE_UNCHECKED_ITERATORS
@@ -468,6 +470,9 @@ private:
 
     constexpr explicit slice(T* addr, std::size_t sz) : addr_(addr), sz_(sz) { }
 
+    slice(slice const&) = default;
+    auto operator=(slice const&) -> slice& = default;
+
 public:
     using value_type = T;
     using size_type = std::size_t;
@@ -480,9 +485,6 @@ public:
     using const_iterator = detail::contiguous_iterator_t<value_type const>;
     using reverse_iterator = std::reverse_iterator<iterator>;
     using const_reverse_iterator = std::reverse_iterator<const_iterator>;
-
-    slice(slice const&) = delete;
-    void operator=(slice const&) = delete;
 
     constexpr auto operator[](size_type idx) -> reference
     {
@@ -655,9 +657,7 @@ public:
         return pointer(ptr, sz);
     }
 
-    constexpr pointer(pointer const& other) noexcept : slice_(other.slice_.addr_, other.slice_.sz_)
-    {
-    }
+    pointer(pointer const&) = default;
 
     // If we are const, allow copy-construction from non-const
     constexpr pointer(pointer<std::remove_const_t<T>[]> const& other) noexcept
@@ -666,12 +666,7 @@ public:
     {
     }
 
-    constexpr auto operator=(pointer const& other) noexcept -> pointer&
-    {
-        slice_.addr_ = other.slice_.addr_;
-        slice_.sz_ = other.slice_.sz_;
-        return *this;
-    }
+    auto operator=(pointer const&) -> pointer& = default;
 
     constexpr auto operator*() const& noexcept TCB_PTR_LIFETIME_BOUND->element_type&
     {
