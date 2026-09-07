@@ -168,7 +168,7 @@ public:
 
     friend constexpr auto operator==(pointer lhs, pointer rhs) -> bool
     {
-        return std::compare_three_way{}(lhs.addr_, rhs.addr_) == 0;
+        return std::ranges::equal_to{}(lhs.addr_, rhs.addr_);
     }
 
     friend constexpr auto operator<=>(pointer lhs, pointer rhs) -> std::strong_ordering
@@ -281,7 +281,10 @@ public:
 
     explicit operator bool() const noexcept { return this->addr_ != nullptr; }
 
-    friend auto operator==(pointer lhs, pointer rhs) -> bool { return lhs.addr_ == rhs.addr_; }
+    friend auto operator==(pointer lhs, pointer rhs) -> bool
+    {
+        return std::ranges::equal_to{}(lhs.addr_, rhs.addr_);
+    }
 
     friend auto operator<=>(pointer lhs, pointer rhs) -> std::strong_ordering
     {
