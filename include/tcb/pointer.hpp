@@ -459,11 +459,106 @@ constexpr auto make_end_iterator(T* addr, std::size_t size) -> contiguous_iterat
 
 } // namespace detail
 
-// MARK: Slice
+// MARK: Unchecked slice
 
 TCB_PTR_EXPORT template <typename T>
-    requires(std::is_object_v<T> && !std::is_const_v<T>)
-struct TCB_PTR_GSL_POINTER(T) slice {
+struct TCB_PTR_GSL_POINTER(T) slice;
+
+TCB_PTR_EXPORT template <typename T>
+struct TCB_PTR_GSL_POINTER(T) unchecked_slice {
+private:
+    T* addr_;
+    std::size_t sz_;
+
+    friend struct slice<T>;
+
+    constexpr explicit unchecked_slice(T* addr, std::size_t sz) : addr_(addr), sz_(sz) { }
+
+    unchecked_slice(unchecked_slice const&) = default;
+    auto operator=(unchecked_slice const&) -> unchecked_slice& = default;
+
+public:
+    using value_type = T;
+    using size_type = std::size_t;
+    using difference_type = std::ptrdiff_t;
+    using reference = T&;
+    using const_reference = T const&;
+    using pointer = value_type*;
+    using const_pointer = value_type const*;
+    using iterator = pointer;
+    using const_iterator = const_pointer;
+    using reverse_iterator = std::reverse_iterator<iterator>;
+    using const_reverse_iterator = std::reverse_iterator<const_iterator>;
+
+    constexpr auto operator[](size_type idx) -> reference { return addr_[idx]; }
+
+    constexpr auto operator[](size_type idx) const -> const_reference { return addr_[idx]; }
+
+    constexpr auto front() -> reference { return addr_[0]; }
+    constexpr auto front() const -> const_reference { return addr_[0]; }
+
+    constexpr auto back() -> reference { return addr_[sz_ - 1]; }
+    constexpr auto back() const -> const_reference { return addr_[sz_ - 1]; }
+
+    constexpr auto size() const -> size_type { return sz_; }
+    constexpr auto empty() const -> bool { return sz_ == 0; }
+
+    constexpr auto data() -> pointer { return addr_; }
+    constexpr auto data() const -> const_pointer { return addr_; }
+
+    constexpr auto begin() -> iterator { return addr_; }
+    constexpr auto begin() const -> const_iterator { return addr_; }
+    constexpr auto cbegin() const -> const_iterator { return begin(); }
+
+    constexpr auto end() -> iterator { return addr_ + sz_; }
+    constexpr auto end() const -> const_iterator { return addr_ + sz_; }
+    constexpr auto cend() const -> const_iterator { return end(); }
+
+    constexpr auto rbegin() -> reverse_iterator { return reverse_iterator(end()); }
+    constexpr auto rbegin() const -> const_reverse_iterator
+    {
+        return const_reverse_iterator(end());
+    }
+    constexpr auto crbegin() const -> const_reverse_iterator { return rbegin(); }
+
+    constexpr auto rend() -> reverse_iterator { return reverse_iterator(begin()); }
+    constexpr auto rend() const -> const_reverse_iterator
+    {
+        return const_reverse_iterator(begin());
+    }
+    constexpr auto crend() const -> const_reverse_iterator { return rend(); }
+
+    friend constexpr auto operator==(unchecked_slice const& lhs, unchecked_slice const& rhs) -> bool
+        requires std::equality_comparable<T>
+    {
+        return std::ranges::equal(lhs, rhs);
+    }
+
+    friend constexpr auto operator<=>(unchecked_slice const& lhs, unchecked_slice const& rhs)
+        requires std::totally_ordered<T>
+    {
+        auto cmp = [](const_reference lhs, const_reference rhs) {
+            if constexpr (std::three_way_comparable<T>) {
+                return lhs <=> rhs;
+            } else {
+                if (lhs < rhs) {
+                    return std::weak_ordering::less;
+                } else if (rhs < lhs) {
+                    return std::weak_ordering::greater;
+                } else {
+                    return std::weak_ordering::equivalent;
+                }
+            }
+        };
+        return std::lexicographical_compare_three_way(lhs.begin(), lhs.end(), rhs.begin(),
+                                                      rhs.end(), cmp);
+    }
+};
+
+// MARK: Slice
+
+template <typename T>
+struct slice {
 private:
     T* addr_;
     std::size_t sz_;
@@ -848,6 +943,9 @@ TCB_PTR_EXPORT inline constexpr auto& ptr_to_array = pointer_to_array;
 TCB_PTR_EXPORT inline constexpr auto& ptr_to_mut_array = pointer_to_mut_array;
 
 } // namespace tcb
+
+template <typename T>
+constexpr bool std::ranges::enable_borrowed_range<tcb::unchecked_slice<T>> = true;
 
 template <typename T>
 constexpr bool std::ranges::enable_borrowed_range<tcb::slice<T>> = true;
