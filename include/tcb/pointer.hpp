@@ -427,34 +427,17 @@ public:
         -> std::strong_ordering = default;
 };
 
-#ifndef TCB_PTR_USE_UNCHECKED_ITERATORS
 template <typename T>
-using contiguous_iterator_t = checked_iterator<T>;
-#else
-template <typename T>
-using contiguous_iterator_t = T*;
-#endif
-
-template <typename T>
-constexpr auto make_begin_iterator(T* addr, std::size_t size [[maybe_unused]])
-    -> contiguous_iterator_t<T>
+constexpr auto make_begin_iterator(T* addr, std::size_t size) -> checked_iterator<T>
 {
-#ifndef TCB_PTR_USE_UNCHECKED_ITERATORS
     return checked_iterator<T>(addr, 0, static_cast<std::ptrdiff_t>(size));
-#else
-    return addr;
-#endif
 }
 
 template <typename T>
-constexpr auto make_end_iterator(T* addr, std::size_t size) -> contiguous_iterator_t<T>
+constexpr auto make_end_iterator(T* addr, std::size_t size) -> checked_iterator<T>
 {
-#ifndef TCB_PTR_USE_UNCHECKED_ITERATORS
     return checked_iterator<T>(addr, static_cast<std::ptrdiff_t>(size),
                                static_cast<std::ptrdiff_t>(size));
-#else
-    return addr + size;
-#endif
 }
 
 } // namespace detail
@@ -579,8 +562,8 @@ public:
     using const_reference = T const&;
     using pointer = value_type*;
     using const_pointer = value_type const*;
-    using iterator = detail::contiguous_iterator_t<value_type>;
-    using const_iterator = detail::contiguous_iterator_t<value_type const>;
+    using iterator = detail::checked_iterator<value_type>;
+    using const_iterator = detail::checked_iterator<value_type const>;
     using reverse_iterator = std::reverse_iterator<iterator>;
     using const_reverse_iterator = std::reverse_iterator<const_iterator>;
 
@@ -971,8 +954,8 @@ private:
 
 public:
     using value_type = tcb::pointer<T>;
-    using iterator = tcb::detail::contiguous_iterator_t<value_type>;
-    using const_iterator = tcb::detail::contiguous_iterator_t<value_type const>;
+    using iterator = tcb::detail::checked_iterator<value_type>;
+    using const_iterator = tcb::detail::checked_iterator<value_type const>;
 
     /*
      * Constructors
