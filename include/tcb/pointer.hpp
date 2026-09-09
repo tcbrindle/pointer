@@ -559,14 +559,14 @@ public:
 
 template <typename T>
 struct slice {
-private:
-    T* addr_;
-    std::size_t sz_;
 
+    unchecked_slice<T> unchecked;
+
+private:
     friend struct pointer<T[]>;
     friend struct pointer<T const[]>;
 
-    constexpr explicit slice(T* addr, std::size_t sz) : addr_(addr), sz_(sz) { }
+    constexpr explicit slice(T* addr, std::size_t sz) : unchecked(addr, sz) { }
 
     slice(slice const&) = default;
     auto operator=(slice const&) -> slice& = default;
@@ -586,83 +586,92 @@ public:
 
     constexpr auto operator[](size_type idx) -> reference
     {
-        if (idx >= sz_) {
+        if (idx >= unchecked.sz_) {
             TCB_PTR_RUNTIME_ERROR("Index out of bounds in slice access");
         }
-        return addr_[idx];
+        return unchecked.addr_[idx];
     }
 
     constexpr auto operator[](size_type idx) const -> const_reference
     {
-        if (idx >= sz_) {
+        if (idx >= unchecked.sz_) {
             TCB_PTR_RUNTIME_ERROR("Index out of bounds in slice access");
         }
-        return addr_[idx];
+        return unchecked.addr_[idx];
     }
 
     constexpr auto at(size_type idx) -> reference
     {
-        if (idx >= sz_) {
+        if (idx >= unchecked.sz_) {
             TCB_PTR_THROW(std::out_of_range("Index out of bounds in slice access"));
         }
-        return addr_[idx];
+        return unchecked.addr_[idx];
     }
 
     constexpr auto at(size_type idx) const -> const_reference
     {
-        if (idx >= sz_) {
+        if (idx >= unchecked.sz_) {
             TCB_PTR_THROW(std::out_of_range("Index out of bounds in slice access"));
         }
-        return addr_[idx];
+        return unchecked.addr_[idx];
     }
 
     constexpr auto front() -> reference
     {
-        if (sz_ == 0) {
+        if (unchecked.sz_ == 0) {
             TCB_PTR_RUNTIME_ERROR("Accessing front of empty slice");
         }
-        return addr_[0];
+        return unchecked.addr_[0];
     }
 
     constexpr auto front() const -> const_reference
     {
-        if (sz_ == 0) {
+        if (unchecked.sz_ == 0) {
             TCB_PTR_RUNTIME_ERROR("Accessing front of empty slice");
         }
-        return addr_[0];
+        return unchecked.addr_[0];
     }
 
     constexpr auto back() -> reference
     {
-        if (sz_ == 0) {
+        if (unchecked.sz_ == 0) {
             TCB_PTR_RUNTIME_ERROR("Accessing back of empty slice");
         }
-        return addr_[sz_ - 1];
+        return unchecked.addr_[unchecked.sz_ - 1];
     }
 
     constexpr auto back() const -> const_reference
     {
-        if (sz_ == 0) {
+        if (unchecked.sz_ == 0) {
             TCB_PTR_RUNTIME_ERROR("Accessing back of empty slice");
         }
-        return addr_[sz_ - 1];
+        return unchecked.addr_[unchecked.sz_ - 1];
     }
 
-    constexpr auto size() const -> size_type { return sz_; }
-    constexpr auto empty() const -> bool { return sz_ == 0; }
+    constexpr auto size() const -> size_type { return unchecked.sz_; }
+    constexpr auto empty() const -> bool { return unchecked.sz_ == 0; }
 
-    constexpr auto data() -> pointer { return addr_; }
-    constexpr auto data() const -> const_pointer { return addr_; }
+    constexpr auto data() -> pointer { return unchecked.addr_; }
+    constexpr auto data() const -> const_pointer { return unchecked.addr_; }
 
-    constexpr auto begin() -> iterator { return detail::make_begin_iterator(addr_, sz_); }
+    constexpr auto begin() -> iterator
+    {
+        return detail::make_begin_iterator(unchecked.addr_, unchecked.sz_);
+    }
     constexpr auto begin() const -> const_iterator
     {
-        return detail::make_begin_iterator(addr_, sz_);
+        return detail::make_begin_iterator(unchecked.addr_, unchecked.sz_);
     }
     constexpr auto cbegin() const -> const_iterator { return begin(); }
 
-    constexpr auto end() -> iterator { return detail::make_end_iterator(addr_, sz_); }
-    constexpr auto end() const -> const_iterator { return detail::make_end_iterator(addr_, sz_); }
+    constexpr auto end() -> iterator
+    {
+        return detail::make_end_iterator(unchecked.addr_, unchecked.sz_);
+    }
+    constexpr auto end() const -> const_iterator
+    {
+        return detail::make_end_iterator(unchecked.addr_, unchecked.sz_);
+    }
     constexpr auto cend() const -> const_iterator { return end(); }
 
     constexpr auto rbegin() -> reverse_iterator { return reverse_iterator(end()); }
@@ -681,29 +690,11 @@ public:
 
     friend constexpr auto operator==(slice const& lhs, slice const& rhs) -> bool
         requires std::equality_comparable<T>
-    {
-        return std::ranges::equal(lhs, rhs);
-    }
+    = default;
 
     friend constexpr auto operator<=>(slice const& lhs, slice const& rhs)
         requires std::totally_ordered<T>
-    {
-        auto cmp = [](const_reference lhs, const_reference rhs) {
-            if constexpr (std::three_way_comparable<T>) {
-                return lhs <=> rhs;
-            } else {
-                if (lhs < rhs) {
-                    return std::weak_ordering::less;
-                } else if (rhs < lhs) {
-                    return std::weak_ordering::greater;
-                } else {
-                    return std::weak_ordering::equivalent;
-                }
-            }
-        };
-        return std::lexicographical_compare_three_way(lhs.begin(), lhs.end(), rhs.begin(),
-                                                      rhs.end(), cmp);
-    }
+    = default;
 };
 
 // MARK: Array pointer
@@ -786,7 +777,7 @@ public:
     }
     void operator->() const&& = delete;
 
-    constexpr explicit operator bool() const noexcept { return slice_.addr_ != nullptr; }
+    constexpr explicit operator bool() const noexcept { return slice_.data() != nullptr; }
 
     friend constexpr auto operator==(pointer const& lhs, pointer const& rhs) -> bool
     {
