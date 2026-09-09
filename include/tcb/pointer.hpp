@@ -42,7 +42,9 @@ DEALINGS IN THE SOFTWARE.
 #    include <compare> // for std::strong_ordering
 #    include <concepts>
 #    include <cstddef>
+#    include <cstdlib>
 #    include <functional> // for std::invoke
+#    include <iterator> // for std::reverse_iterator
 #    include <memory> // for std::addressof
 #    include <optional> // for std::optional<pointer>
 #    include <ranges> // for std::ranges::contiguous_range etc
@@ -82,12 +84,14 @@ DEALINGS IN THE SOFTWARE.
                 std::terminate();                                                          \
             } while (0)
 #    else
-#        if defined(__has_builtin)
+#        if defined(_MSC_VER)
+#            define TCB_PTR_RUNTIME_ERROR(msg) __fastfail(7) // FAST_FAIL_FATAL_APP_EXIT
+#        elif defined(__has_builtin)
 #            if __has_builtin(__builtin_trap)
 #                define TCB_PTR_RUNTIME_ERROR(msg) __builtin_trap()
+#            else
+#                define TCB_PTR_RUNTIME_ERROR(msg) std::abort()
 #            endif
-#        elif defined(_MSC_VER)
-#            define TCB_PTR_RUNTIME_ERROR(msg) __fastfail(7) // FAST_FAIL_FATAL_APP_EXIT
 #        else
 #            define TCB_PTR_RUNTIME_ERROR(msg) std::abort()
 #        endif
