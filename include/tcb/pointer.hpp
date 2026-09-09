@@ -443,6 +443,9 @@ struct TCB_PTR_GSL_POINTER(T) slice;
 TCB_PTR_EXPORT template <typename T>
 struct TCB_PTR_GSL_POINTER(T) unchecked_slice {
 private:
+    static_assert(std::is_object_v<T> && !std::is_const_v<T>,
+                  "slice element must be a non-const object type");
+
     T* addr_;
     std::size_t sz_;
 
@@ -505,13 +508,13 @@ public:
     constexpr auto crend() const -> const_reverse_iterator { return rend(); }
 
     friend constexpr auto operator==(unchecked_slice const& lhs, unchecked_slice const& rhs) -> bool
-        requires std::equality_comparable<T>
+        requires(std::equality_comparable<T> && !std::is_array_v<T>)
     {
         return std::ranges::equal(lhs, rhs);
     }
 
     friend constexpr auto operator<=>(unchecked_slice const& lhs, unchecked_slice const& rhs)
-        requires std::totally_ordered<T>
+        requires(std::totally_ordered<T> && !std::is_array_v<T>)
     {
         auto cmp = [](const_reference lhs, const_reference rhs) {
             if constexpr (std::three_way_comparable<T>) {
@@ -665,11 +668,11 @@ public:
     constexpr auto crend() const -> const_reverse_iterator { return rend(); }
 
     friend constexpr auto operator==(slice const& lhs, slice const& rhs) -> bool
-        requires std::equality_comparable<T>
+        requires(std::equality_comparable<T> && !std::is_array_v<T>)
     = default;
 
     friend constexpr auto operator<=>(slice const& lhs, slice const& rhs)
-        requires std::totally_ordered<T>
+        requires(std::totally_ordered<T> && !std::is_array_v<T>)
     = default;
 };
 
