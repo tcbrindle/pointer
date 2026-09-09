@@ -524,12 +524,12 @@ public:
             if constexpr (std::three_way_comparable<T>) {
                 return lhs <=> rhs;
             } else {
-                if (lhs < rhs) {
-                    return std::weak_ordering::less;
-                } else if (rhs < lhs) {
-                    return std::weak_ordering::greater;
-                } else {
+                if (lhs == rhs) {
                     return std::weak_ordering::equivalent;
+                } else if (lhs < rhs) {
+                    return std::weak_ordering::less;
+                } else {
+                    return std::weak_ordering::greater;
                 }
             }
         };
