@@ -703,10 +703,9 @@ bool test_checked_iterator_bounds_checking()
  * MARK: Slice tests
  */
 
+template <typename S>
 constexpr bool test_slice_traits()
 {
-    using S = tcb::slice<int>;
-
     // Slices are not default constructible, copyable or movable
     static_assert(not std::is_default_constructible_v<S>);
     static_assert(not std::is_copy_constructible_v<S>);
@@ -748,7 +747,8 @@ constexpr bool test_slice_traits()
 
     return true;
 }
-static_assert(test_slice_traits());
+static_assert(test_slice_traits<tcb::unchecked_slice<int>>());
+static_assert(test_slice_traits<tcb::slice<int>>());
 
 struct no_spaceship {
     int i;
@@ -890,6 +890,112 @@ constexpr bool test_slice()
     return true;
 }
 static_assert(test_slice());
+
+constexpr bool test_unchecked_slice()
+{
+    // Basic slice functionality
+    {
+        std::array arr{0, 1, 2, 3, 4};
+
+        auto ptr = tcb::ptr<int[]>::pointer_to(arr);
+        auto& slice = ptr->unchecked;
+
+        REQUIRE(&slice[0] == &arr[0]);
+        REQUIRE(&slice.front() == &arr.front());
+        REQUIRE(&slice.back() == &arr.back());
+
+        REQUIRE(slice.size() == arr.size());
+        REQUIRE(slice.empty() == arr.empty());
+        REQUIRE(slice.data() == arr.data());
+
+        REQUIRE(std::ranges::equal(slice, arr));
+        REQUIRE(std::ranges::equal(slice.cbegin(), slice.cend(), arr.cbegin(), arr.cend()));
+        REQUIRE(std::ranges::equal(slice | std::views::reverse, arr | std::views::reverse));
+        REQUIRE(std::ranges::equal(slice.crbegin(), slice.crend(), arr.crbegin(), arr.crend()));
+    }
+
+    // Same again, but const this time
+    {
+        std::array const arr{0, 1, 2, 3, 4};
+
+        auto ptr = tcb::ptr<int const[]>::pointer_to(arr);
+        auto& slice = ptr->unchecked;
+
+        REQUIRE(&slice[0] == &arr[0]);
+        REQUIRE(&slice.front() == &arr.front());
+        REQUIRE(&slice.back() == &arr.back());
+
+        REQUIRE(slice.size() == arr.size());
+        REQUIRE(slice.empty() == arr.empty());
+        REQUIRE(slice.data() == arr.data());
+
+        REQUIRE(std::ranges::equal(slice, arr));
+        REQUIRE(std::ranges::equal(slice.cbegin(), slice.cend(), arr.cbegin(), arr.cend()));
+        REQUIRE(std::ranges::equal(slice | std::views::reverse, arr | std::views::reverse));
+        REQUIRE(std::ranges::equal(slice.crbegin(), slice.crend(), arr.crbegin(), arr.crend()));
+    }
+
+    // Empty ranges are handled correctly
+    {
+        std::array<int, 0> arr{};
+        auto ptr = tcb::ptr<int[]>::pointer_to(arr);
+        auto& slice = ptr->unchecked;
+
+        REQUIRE(slice.size() == 0);
+        REQUIRE(slice.empty());
+        REQUIRE(slice.data() == arr.data());
+
+        REQUIRE(std::ranges::equal(slice, arr));
+    }
+
+    // Slice comparisons work as expected
+    {
+        auto array = std::array{1, 2, 3, 4, 5};
+        auto same_array = array;
+        auto shorter_array = std::array{1, 2, 3, 4};
+        auto different_array = std::array{1, 2, 99, 4, 5};
+
+        auto p_array = tcb::ptr<int[]>::pointer_to(array);
+        auto p_same_array = tcb::ptr<int[]>::pointer_to(same_array);
+        auto p_shorter_array = tcb::ptr<int[]>::pointer_to(shorter_array);
+        auto p_different_array = tcb::ptr<int[]>::pointer_to(different_array);
+
+        auto& s_array = p_array->unchecked;
+        auto& s_same_array = p_same_array->unchecked;
+        auto& s_shorter_array = p_shorter_array->unchecked;
+        auto& s_different_array = p_different_array->unchecked;
+
+        REQUIRE(s_array == s_same_array);
+        REQUIRE(s_array != s_shorter_array);
+        REQUIRE(s_array != s_different_array);
+
+        REQUIRE(s_array <=> s_same_array == std::strong_ordering::equal);
+        REQUIRE(s_array <=> s_shorter_array == std::strong_ordering::greater);
+        REQUIRE(s_shorter_array <=> s_array == std::strong_ordering::less);
+
+        // Float comparison should be partially ordered, and handle nans
+        if (!(compiler_is_msvc && std::is_constant_evaluated())) {
+            float nan = std::numeric_limits<float>::quiet_NaN();
+            float floats[] = {1.0f, nan, 3.0f};
+            auto p_floats = tcb::ptr<float const[]>::pointer_to(floats);
+            auto float_cmp = p_floats->unchecked <=> p_floats->unchecked;
+            static_assert(std::same_as<decltype(float_cmp), std::partial_ordering>);
+            REQUIRE(float_cmp == std::partial_ordering::unordered);
+        }
+
+        // We can compare types without a spaceship operator
+        {
+            no_spaceship ns[] = {{1}, {2}, {3}};
+            auto ptr = tcb::ptr_to_array(ns);
+            auto cmp = ptr->unchecked <=> ptr->unchecked;
+            static_assert(std::same_as<decltype(cmp), std::weak_ordering>);
+            REQUIRE(cmp == std::weak_ordering::equivalent);
+        }
+    }
+
+    return true;
+}
+static_assert(test_unchecked_slice());
 
 /*
  * MARK: array ptr tests
@@ -1677,6 +1783,10 @@ int main()
 
     // slice tests
     b = test_slice();
+    REQUIRE(b);
+
+    // unchecked slice tests
+    b = test_unchecked_slice();
     REQUIRE(b);
 
     // array pointer tests
