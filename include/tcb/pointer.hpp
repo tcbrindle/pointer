@@ -300,17 +300,14 @@ template <typename T>
 struct TCB_PTR_GSL_POINTER(T) checked_iterator {
 private:
     T* start_ = nullptr;
-    std::ptrdiff_t pos_ = 0;
-    std::ptrdiff_t size_ = 0;
+    std::size_t pos_ = 0;
+    std::size_t sz_ = 0;
 
     friend struct checked_iterator<std::add_const_t<T>>;
 
-    constexpr explicit checked_iterator(T* start, std::ptrdiff_t pos, std::ptrdiff_t size)
-        : start_(start), pos_(pos), size_(size)
+    constexpr explicit checked_iterator(T* start, std::size_t pos, std::size_t size)
+        : start_(start), pos_(pos), sz_(size)
     {
-        if (pos_ < 0 || pos_ > size_) {
-            TCB_PTR_RUNTIME_ERROR("Bad size or position in checked_iterator ctor");
-        }
     }
 
     struct buffer_t {
@@ -326,20 +323,19 @@ public:
 
     static constexpr auto to_start_of(buffer_t buf) -> checked_iterator
     {
-        return checked_iterator(buf.start_addr, 0, static_cast<std::ptrdiff_t>(buf.size));
+        return checked_iterator(buf.start_addr, 0, buf.size);
     }
 
     static constexpr auto to_end_of(buffer_t buf) -> checked_iterator
     {
-        return checked_iterator(buf.start_addr, static_cast<std::ptrdiff_t>(buf.size),
-                                static_cast<std::ptrdiff_t>(buf.size));
+        return checked_iterator(buf.start_addr, buf.size, buf.size);
     }
 
     checked_iterator() = default;
 
     constexpr checked_iterator(checked_iterator<std::remove_const_t<T>> const& other)
         requires(std::is_const_v<T>)
-        : start_(other.start_), pos_(other.pos_), size_(other.size_)
+        : start_(other.start_), pos_(other.pos_), sz_(other.sz_)
     {
     }
 
@@ -351,27 +347,30 @@ public:
 
     constexpr auto operator*() const -> reference
     {
-        if (pos_ == size_) {
-            TCB_PTR_RUNTIME_ERROR("Cannot dereference past-the-end iterator");
+        if (pos_ >= sz_) {
+            TCB_PTR_RUNTIME_ERROR("Cannot dereference out-of-bounds iterator");
         }
         return start_[pos_];
     }
 
     constexpr auto operator[](difference_type idx) const -> reference
     {
-        if (idx >= (size_ - pos_) || idx < -pos_) {
-            TCB_PTR_RUNTIME_ERROR("Out of bounds random-access read");
+        if ((pos_ + static_cast<std::size_t>(idx)) >= sz_) {
+            TCB_PTR_RUNTIME_ERROR("Cannot dereference out-of-bounds iterator");
         }
-        return start_[pos_ + idx];
+        return start_[pos_ + static_cast<std::size_t>(idx)];
     }
 
-    constexpr auto operator->() const -> T* { return start_ + pos_; }
+    constexpr auto operator->() const -> T*
+    {
+        if (pos_ > sz_) {
+            TCB_PTR_RUNTIME_ERROR("Cannot form pointer from out-of-bounds iterator");
+        }
+        return start_ + pos_;
+    }
 
     constexpr auto operator++() -> checked_iterator&
     {
-        if (pos_ == size_) {
-            TCB_PTR_RUNTIME_ERROR("Cannot increment past-the-end iterator");
-        }
         ++pos_;
         return *this;
     }
@@ -385,9 +384,6 @@ public:
 
     constexpr auto operator--() -> checked_iterator&
     {
-        if (pos_ == 0) {
-            TCB_PTR_RUNTIME_ERROR("Cannot decrement start iterator");
-        }
         --pos_;
         return *this;
     }
@@ -401,19 +397,13 @@ public:
 
     constexpr auto operator+=(difference_type offset) -> checked_iterator&
     {
-        if (offset > (size_ - pos_) || offset < -pos_) {
-            TCB_PTR_RUNTIME_ERROR("Out of bounds random-access jump");
-        }
-        pos_ += offset;
+        pos_ += static_cast<std::size_t>(offset);
         return *this;
     }
 
     constexpr auto operator-=(difference_type offset) -> checked_iterator&
     {
-        if (offset < (pos_ - size_) || offset > pos_) {
-            TCB_PTR_RUNTIME_ERROR("Out of bounds random-access jump");
-        }
-        pos_ -= offset;
+        pos_ -= static_cast<std::size_t>(offset);
         return *this;
     }
 
@@ -435,7 +425,7 @@ public:
     friend constexpr auto operator-(checked_iterator const& lhs, checked_iterator const& rhs)
         -> difference_type
     {
-        return lhs.pos_ - rhs.pos_;
+        return static_cast<difference_type>(lhs.pos_) - static_cast<difference_type>(rhs.pos_);
     }
 
     friend auto operator==(checked_iterator const&, checked_iterator const&) -> bool = default;

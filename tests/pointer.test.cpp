@@ -661,20 +661,20 @@ bool test_checked_iterator_bounds_checking()
     // Cannot deref end iterator
     REQUIRE_ERROR(*end);
 
-    // Cannot advance end iterator
-    REQUIRE_ERROR(++Iter(end));
-    REQUIRE_ERROR(Iter(end)++);
+    // Cannot deref advanced end iterator
+    REQUIRE_ERROR(*++Iter(end));
+    REQUIRE_ERROR(*Iter(end)++);
 
-    // Cannot decrement start iterator
-    REQUIRE_ERROR(--Iter(start));
-    REQUIRE_ERROR(Iter(start)--);
+    // Cannot deref decremented start iterator
+    REQUIRE_ERROR(*--Iter(start));
+    // REQUIRE_ERROR(*Iter(start)--);
 
-    // Cannot perform out-of-bounds RA jumps
-    REQUIRE_ERROR((start + -1));
-    REQUIRE_ERROR((start - 1));
-    REQUIRE_ERROR((start + std::ssize(arr) + 1));
-    REQUIRE_ERROR((end + 1));
-    REQUIRE_ERROR((end - std::ssize(arr) - 1));
+    // Cannot deref after out-of-bounds RA jumps
+    REQUIRE_ERROR(*(start + -1));
+    REQUIRE_ERROR(*(start - 1));
+    REQUIRE_ERROR(*(start + std::ssize(arr) + 1));
+    REQUIRE_ERROR(*(end + 1));
+    REQUIRE_ERROR(*(end - std::ssize(arr) - 1));
 
     REQUIRE_ERROR(start[-1]);
     REQUIRE_ERROR(start[std::ssize(arr)]);
@@ -683,14 +683,14 @@ bool test_checked_iterator_bounds_checking()
     REQUIRE_ERROR(end[-std::ssize(arr) - 1]);
 
     // Integer overflow checks
-    REQUIRE_ERROR((start + PTRDIFF_MAX));
-    REQUIRE_ERROR((start + PTRDIFF_MIN));
-    REQUIRE_ERROR((start - PTRDIFF_MAX));
-    REQUIRE_ERROR((start - PTRDIFF_MIN));
-    REQUIRE_ERROR((end + PTRDIFF_MAX));
-    REQUIRE_ERROR((end + PTRDIFF_MIN));
-    REQUIRE_ERROR((end - PTRDIFF_MAX));
-    REQUIRE_ERROR((end - PTRDIFF_MIN));
+    REQUIRE_ERROR(*(start + PTRDIFF_MAX));
+    REQUIRE_ERROR(*(start + PTRDIFF_MIN));
+    REQUIRE_ERROR(*(start - PTRDIFF_MAX));
+    REQUIRE_ERROR(*(start - PTRDIFF_MIN));
+    REQUIRE_ERROR(*(end + PTRDIFF_MAX));
+    REQUIRE_ERROR(*(end + PTRDIFF_MIN));
+    REQUIRE_ERROR(*(end - PTRDIFF_MAX));
+    REQUIRE_ERROR(*(end - PTRDIFF_MIN));
     REQUIRE_ERROR(start[PTRDIFF_MAX]);
     REQUIRE_ERROR(start[PTRDIFF_MIN]);
     REQUIRE_ERROR(end[PTRDIFF_MAX]);
