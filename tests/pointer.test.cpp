@@ -597,8 +597,8 @@ constexpr bool test_checked_iterator()
     {
         std::array arr{1, 2, 3, 4, 5};
 
-        auto start = Iter(arr.data(), 0, arr.size());
-        auto end = Iter(arr.data(), arr.size(), arr.size());
+        auto start = Iter::to_start_of({arr.data(), arr.size()});
+        auto end = Iter::to_end_of({arr.data(), arr.size()});
 
         REQUIRE(std::ranges::equal(arr, std::ranges::subrange(start, end)));
         REQUIRE(std::ranges::equal(arr | std::views::reverse,
@@ -609,7 +609,7 @@ constexpr bool test_checked_iterator()
     {
         std::array arr{1, 2, 3, 4, 5};
 
-        auto start = Iter(arr.data(), 0, arr.size());
+        auto start = Iter::to_start_of({arr.data(), arr.size()});
         auto next = std::next(start);
 
         REQUIRE(start == start);
@@ -624,8 +624,8 @@ constexpr bool test_checked_iterator()
     {
         std::array arr{1, 2, 3, 4, 5};
 
-        auto start = Iter(arr.data(), 0, arr.size());
-        auto end = Iter(arr.data(), arr.size(), arr.size());
+        auto start = Iter::to_start_of({arr.data(), arr.size()});
+        auto end = Iter::to_end_of({arr.data(), arr.size()});
 
         REQUIRE(start + 5 == end);
         REQUIRE(end - 5 == start);
@@ -636,7 +636,7 @@ constexpr bool test_checked_iterator()
     {
         std::array arr{1, 2, 3, 4, 5};
 
-        Iter start = Iter(arr.data(), 0, arr.size());
+        Iter start = Iter::to_start_of({arr.data(), arr.size()});
         ++start;
 
         CIter copy = start;
@@ -655,8 +655,8 @@ bool test_checked_iterator_bounds_checking()
 
     std::array arr{1, 2, 3, 4, 5};
 
-    auto start = Iter(arr.data(), 0, arr.size());
-    auto end = Iter(arr.data(), arr.size(), arr.size());
+    auto start = Iter::to_start_of({arr.data(), arr.size()});
+    auto end = Iter::to_end_of({arr.data(), arr.size()});
 
     // Cannot deref end iterator
     REQUIRE_ERROR(*end);

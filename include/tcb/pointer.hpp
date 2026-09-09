@@ -305,14 +305,6 @@ private:
 
     friend struct checked_iterator<std::add_const_t<T>>;
 
-public:
-    using value_type = T;
-    using reference = value_type&;
-    using difference_type = std::ptrdiff_t;
-    using iterator_category = std::contiguous_iterator_tag;
-
-    checked_iterator() = default;
-
     constexpr explicit checked_iterator(T* start, std::ptrdiff_t pos, std::ptrdiff_t size)
         : start_(start), pos_(pos), size_(size)
     {
@@ -320,6 +312,30 @@ public:
             TCB_PTR_RUNTIME_ERROR("Bad size or position in checked_iterator ctor");
         }
     }
+
+    struct buffer_t {
+        T* start_addr;
+        std::size_t size;
+    };
+
+public:
+    using value_type = T;
+    using reference = value_type&;
+    using difference_type = std::ptrdiff_t;
+    using iterator_category = std::contiguous_iterator_tag;
+
+    static constexpr auto to_start_of(buffer_t buf) -> checked_iterator
+    {
+        return checked_iterator(buf.start_addr, 0, static_cast<std::ptrdiff_t>(buf.size));
+    }
+
+    static constexpr auto to_end_of(buffer_t buf) -> checked_iterator
+    {
+        return checked_iterator(buf.start_addr, static_cast<std::ptrdiff_t>(buf.size),
+                                static_cast<std::ptrdiff_t>(buf.size));
+    }
+
+    checked_iterator() = default;
 
     constexpr checked_iterator(checked_iterator<std::remove_const_t<T>> const& other)
         requires(std::is_const_v<T>)
@@ -426,19 +442,6 @@ public:
     friend auto operator<=>(checked_iterator const&, checked_iterator const&)
         -> std::strong_ordering = default;
 };
-
-template <typename T>
-constexpr auto make_begin_iterator(T* addr, std::size_t size) -> checked_iterator<T>
-{
-    return checked_iterator<T>(addr, 0, static_cast<std::ptrdiff_t>(size));
-}
-
-template <typename T>
-constexpr auto make_end_iterator(T* addr, std::size_t size) -> checked_iterator<T>
-{
-    return checked_iterator<T>(addr, static_cast<std::ptrdiff_t>(size),
-                               static_cast<std::ptrdiff_t>(size));
-}
 
 } // namespace detail
 
@@ -639,21 +642,21 @@ public:
 
     constexpr auto begin() -> iterator
     {
-        return detail::make_begin_iterator(unchecked.addr_, unchecked.sz_);
+        return iterator::to_start_of({.start_addr = data(), .size = size()});
     }
     constexpr auto begin() const -> const_iterator
     {
-        return detail::make_begin_iterator(unchecked.addr_, unchecked.sz_);
+        return const_iterator::to_start_of({.start_addr = data(), .size = size()});
     }
     constexpr auto cbegin() const -> const_iterator { return begin(); }
 
     constexpr auto end() -> iterator
     {
-        return detail::make_end_iterator(unchecked.addr_, unchecked.sz_);
+        return iterator::to_end_of({.start_addr = data(), .size = size()});
     }
     constexpr auto end() const -> const_iterator
     {
-        return detail::make_end_iterator(unchecked.addr_, unchecked.sz_);
+        return const_iterator::to_end_of({.start_addr = data(), .size = size()});
     }
     constexpr auto cend() const -> const_iterator { return end(); }
 
@@ -1114,22 +1117,26 @@ public:
      */
     constexpr auto begin() noexcept -> iterator
     {
-        return tcb::detail::make_begin_iterator(std::addressof(ptr_), has_value() ? 1 : 0);
+        return iterator::to_start_of(
+            {.start_addr = std::addressof(ptr_), .size = has_value() ? 1u : 0u});
     }
 
     constexpr auto begin() const noexcept -> const_iterator
     {
-        return tcb::detail::make_begin_iterator(std::addressof(ptr_), has_value() ? 1 : 0);
+        return const_iterator::to_start_of(
+            {.start_addr = std::addressof(ptr_), .size = has_value() ? 1u : 0u});
     }
 
     constexpr auto end() noexcept -> iterator
     {
-        return tcb::detail::make_end_iterator(std::addressof(ptr_), has_value() ? 1 : 0);
+        return iterator::to_end_of(
+            {.start_addr = std::addressof(ptr_), .size = has_value() ? 1u : 0u});
     }
 
     constexpr auto end() const noexcept -> const_iterator
     {
-        return tcb::detail::make_end_iterator(std::addressof(ptr_), has_value() ? 1 : 0);
+        return const_iterator::to_end_of(
+            {.start_addr = std::addressof(ptr_), .size = has_value() ? 1u : 0u});
     }
 
     /*
