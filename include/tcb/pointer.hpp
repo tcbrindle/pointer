@@ -110,6 +110,12 @@ DEALINGS IN THE SOFTWARE.
 #    define TCB_PTR_THROW(ex) TCB_PTR_RUNTIME_ERROR(ex.what())
 #endif
 
+#if !defined(TCB_PTR_OPTIONAL_MONADIC_SUPPORT)
+#    if __cpp_lib_optional >= 202110L
+#        define TCB_PTR_OPTIONAL_MONADIC_SUPPORT 1
+#    endif
+#endif
+
 #if !defined(TCB_PTR_OPTIONAL_RANGE_SUPPORT)
 #    if __cpp_lib_optional_range_support >= 202406L
 #        define TCB_PTR_OPTIONAL_RANGE_SUPPORT 1
@@ -1267,6 +1273,7 @@ public:
     /*
      * Monadic operations
      */
+#ifdef TCB_PTR_OPTIONAL_MONADIC_SUPPORT
     template <typename F>
     constexpr auto and_then(F&& f) &
     {
@@ -1413,6 +1420,7 @@ public:
             return std::invoke(static_cast<F&&>(f));
         }
     }
+#endif // TCB_PTR_OPTIONAL_MONADIC_SUPPORT
 
     /*
      * Modifiers
