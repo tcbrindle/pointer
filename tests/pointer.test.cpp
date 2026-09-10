@@ -119,14 +119,21 @@ constexpr bool test_pointer_static_properties()
 
     // I know arrays of unknown bound are technically objects, but...
     constexpr bool is_object = std::is_object_v<T> && !std::is_unbounded_array_v<T>;
+    constexpr bool is_array = std::is_unbounded_array_v<T>;
 
     // pointer to object is the same size as T*
     if constexpr (is_object) {
         static_assert(sizeof(P) == sizeof(T*));
     }
 
-    static_assert(not std::is_default_constructible_v<P>);
-    static_assert(not std::default_initializable<P>);
+    // array pointers are default constructible, but object pointers are not
+    if constexpr (is_array) {
+        static_assert(std::is_default_constructible_v<P>);
+        static_assert(std::default_initializable<P>);
+    } else {
+        static_assert(not std::is_default_constructible_v<P>);
+        static_assert(not std::default_initializable<P>);
+    }
 
     // pointer<T> is copyable, movable, etc (type traits)
     static_assert(std::is_copy_constructible_v<P>);
@@ -162,13 +169,6 @@ constexpr bool test_pointer_static_properties()
     static_assert(std::totally_ordered<P>);
     static_assert(std::three_way_comparable<P, std::strong_ordering>);
 
-    // pointer<T> is explicitly (but not implicitly) convertible to bool
-    static_assert(not std::is_convertible_v<P, bool>);
-    static_assert(requires(P& p) {
-        { static_cast<bool>(p) };
-        { p ? 1 : 0 };
-    });
-
     // pointer_to object is explicitly but not implicitly convertible to T*
     static_assert(not std::is_convertible_v<P, T*>);
     if constexpr (is_object) {
@@ -178,7 +178,7 @@ constexpr bool test_pointer_static_properties()
     }
 
     // P::to_address() returns the correct type for non-arrays
-    if constexpr (!std::is_unbounded_array_v<T>) {
+    if constexpr (!is_array) {
         static_assert(std::same_as<decltype(std::declval<P&>().to_address()), T*>);
     }
 
@@ -342,9 +342,6 @@ constexpr bool test_pointer_to_object()
 
         // explicit cast to int* works correctly
         REQUIRE(static_cast<int*>(p) == std::addressof(i));
-
-        // bool contextual conversion works as expected
-        REQUIRE(p);
 
         // dereferencing works correctly
         REQUIRE(*p == 0);
@@ -597,8 +594,8 @@ constexpr bool test_checked_iterator()
     {
         std::array arr{1, 2, 3, 4, 5};
 
-        auto start = Iter(arr.data(), 0, arr.size());
-        auto end = Iter(arr.data(), arr.size(), arr.size());
+        auto start = Iter::to_start_of({arr.data(), arr.size()});
+        auto end = Iter::to_end_of({arr.data(), arr.size()});
 
         REQUIRE(std::ranges::equal(arr, std::ranges::subrange(start, end)));
         REQUIRE(std::ranges::equal(arr | std::views::reverse,
@@ -609,7 +606,7 @@ constexpr bool test_checked_iterator()
     {
         std::array arr{1, 2, 3, 4, 5};
 
-        auto start = Iter(arr.data(), 0, arr.size());
+        auto start = Iter::to_start_of({arr.data(), arr.size()});
         auto next = std::next(start);
 
         REQUIRE(start == start);
@@ -624,8 +621,8 @@ constexpr bool test_checked_iterator()
     {
         std::array arr{1, 2, 3, 4, 5};
 
-        auto start = Iter(arr.data(), 0, arr.size());
-        auto end = Iter(arr.data(), arr.size(), arr.size());
+        auto start = Iter::to_start_of({arr.data(), arr.size()});
+        auto end = Iter::to_end_of({arr.data(), arr.size()});
 
         REQUIRE(start + 5 == end);
         REQUIRE(end - 5 == start);
@@ -636,7 +633,7 @@ constexpr bool test_checked_iterator()
     {
         std::array arr{1, 2, 3, 4, 5};
 
-        Iter start = Iter(arr.data(), 0, arr.size());
+        Iter start = Iter::to_start_of({arr.data(), arr.size()});
         ++start;
 
         CIter copy = start;
@@ -655,26 +652,26 @@ bool test_checked_iterator_bounds_checking()
 
     std::array arr{1, 2, 3, 4, 5};
 
-    auto start = Iter(arr.data(), 0, arr.size());
-    auto end = Iter(arr.data(), arr.size(), arr.size());
+    auto start = Iter::to_start_of({arr.data(), arr.size()});
+    auto end = Iter::to_end_of({arr.data(), arr.size()});
 
     // Cannot deref end iterator
     REQUIRE_ERROR(*end);
 
-    // Cannot advance end iterator
-    REQUIRE_ERROR(++Iter(end));
-    REQUIRE_ERROR(Iter(end)++);
+    // Cannot deref advanced end iterator
+    REQUIRE_ERROR(*++Iter(end));
+    REQUIRE_ERROR(*Iter(end)++);
 
-    // Cannot decrement start iterator
-    REQUIRE_ERROR(--Iter(start));
-    REQUIRE_ERROR(Iter(start)--);
+    // Cannot deref decremented start iterator
+    REQUIRE_ERROR(*--Iter(start));
+    // REQUIRE_ERROR(*Iter(start)--);
 
-    // Cannot perform out-of-bounds RA jumps
-    REQUIRE_ERROR((start + -1));
-    REQUIRE_ERROR((start - 1));
-    REQUIRE_ERROR((start + std::ssize(arr) + 1));
-    REQUIRE_ERROR((end + 1));
-    REQUIRE_ERROR((end - std::ssize(arr) - 1));
+    // Cannot deref after out-of-bounds RA jumps
+    REQUIRE_ERROR(*(start + -1));
+    REQUIRE_ERROR(*(start - 1));
+    REQUIRE_ERROR(*(start + std::ssize(arr) + 1));
+    REQUIRE_ERROR(*(end + 1));
+    REQUIRE_ERROR(*(end - std::ssize(arr) - 1));
 
     REQUIRE_ERROR(start[-1]);
     REQUIRE_ERROR(start[std::ssize(arr)]);
@@ -683,14 +680,14 @@ bool test_checked_iterator_bounds_checking()
     REQUIRE_ERROR(end[-std::ssize(arr) - 1]);
 
     // Integer overflow checks
-    REQUIRE_ERROR((start + PTRDIFF_MAX));
-    REQUIRE_ERROR((start + PTRDIFF_MIN));
-    REQUIRE_ERROR((start - PTRDIFF_MAX));
-    REQUIRE_ERROR((start - PTRDIFF_MIN));
-    REQUIRE_ERROR((end + PTRDIFF_MAX));
-    REQUIRE_ERROR((end + PTRDIFF_MIN));
-    REQUIRE_ERROR((end - PTRDIFF_MAX));
-    REQUIRE_ERROR((end - PTRDIFF_MIN));
+    REQUIRE_ERROR(*(start + PTRDIFF_MAX));
+    REQUIRE_ERROR(*(start + PTRDIFF_MIN));
+    REQUIRE_ERROR(*(start - PTRDIFF_MAX));
+    REQUIRE_ERROR(*(start - PTRDIFF_MIN));
+    REQUIRE_ERROR(*(end + PTRDIFF_MAX));
+    REQUIRE_ERROR(*(end + PTRDIFF_MIN));
+    REQUIRE_ERROR(*(end - PTRDIFF_MAX));
+    REQUIRE_ERROR(*(end - PTRDIFF_MIN));
     REQUIRE_ERROR(start[PTRDIFF_MAX]);
     REQUIRE_ERROR(start[PTRDIFF_MIN]);
     REQUIRE_ERROR(end[PTRDIFF_MAX]);
@@ -703,10 +700,9 @@ bool test_checked_iterator_bounds_checking()
  * MARK: Slice tests
  */
 
+template <typename S>
 constexpr bool test_slice_traits()
 {
-    using S = tcb::slice<int>;
-
     // Slices are not default constructible, copyable or movable
     static_assert(not std::is_default_constructible_v<S>);
     static_assert(not std::is_copy_constructible_v<S>);
@@ -748,7 +744,8 @@ constexpr bool test_slice_traits()
 
     return true;
 }
-static_assert(test_slice_traits());
+static_assert(test_slice_traits<tcb::unchecked_slice<int>>());
+static_assert(test_slice_traits<tcb::slice<int>>());
 
 struct no_spaceship {
     int i;
@@ -758,6 +755,16 @@ struct no_spaceship {
     constexpr bool operator>(no_spaceship other) const { return other < *this; }
     constexpr bool operator<=(no_spaceship other) const { return !(*this > other); }
     constexpr bool operator>=(no_spaceship other) const { return !(*this < other); }
+};
+
+struct equality_only {
+    bool operator==(equality_only const&) const = default;
+};
+
+struct spaceship_only {
+    int i;
+
+    friend constexpr auto operator<=>(spaceship_only a, spaceship_only b) { return a.i <=> b.i; }
 };
 
 constexpr bool test_slice()
@@ -857,6 +864,21 @@ constexpr bool test_slice()
             static_assert(std::same_as<decltype(cmp), std::weak_ordering>);
             REQUIRE(cmp == std::weak_ordering::equivalent);
         }
+
+        // Comparison operators are constrained as expected
+        {
+            using incomparable = std::span<int>;
+
+            static_assert(std::equality_comparable<tcb::slice<int>>);
+            static_assert(std::equality_comparable<tcb::slice<equality_only>>);
+            static_assert(not std::equality_comparable<tcb::slice<spaceship_only>>);
+            static_assert(not std::equality_comparable<tcb::slice<incomparable>>);
+
+            static_assert(std::three_way_comparable<tcb::slice<int>>);
+            static_assert(not std::three_way_comparable<tcb::slice<equality_only>>);
+            static_assert(not std::three_way_comparable<tcb::slice<spaceship_only>>);
+            static_assert(not std::three_way_comparable<tcb::slice<incomparable>>);
+        }
     }
 
     // Bounds checking works correctly
@@ -890,6 +912,127 @@ constexpr bool test_slice()
     return true;
 }
 static_assert(test_slice());
+
+constexpr bool test_unchecked_slice()
+{
+    // Basic slice functionality
+    {
+        std::array arr{0, 1, 2, 3, 4};
+
+        auto ptr = tcb::ptr<int[]>::pointer_to(arr);
+        auto& slice = ptr->unchecked;
+
+        REQUIRE(&slice[0] == &arr[0]);
+        REQUIRE(&slice.front() == &arr.front());
+        REQUIRE(&slice.back() == &arr.back());
+
+        REQUIRE(slice.size() == arr.size());
+        REQUIRE(slice.empty() == arr.empty());
+        REQUIRE(slice.data() == arr.data());
+
+        REQUIRE(std::ranges::equal(slice, arr));
+        REQUIRE(std::ranges::equal(slice.cbegin(), slice.cend(), arr.cbegin(), arr.cend()));
+        REQUIRE(std::ranges::equal(slice | std::views::reverse, arr | std::views::reverse));
+        REQUIRE(std::ranges::equal(slice.crbegin(), slice.crend(), arr.crbegin(), arr.crend()));
+    }
+
+    // Same again, but const this time
+    {
+        std::array const arr{0, 1, 2, 3, 4};
+
+        auto ptr = tcb::ptr<int const[]>::pointer_to(arr);
+        auto& slice = ptr->unchecked;
+
+        REQUIRE(&slice[0] == &arr[0]);
+        REQUIRE(&slice.front() == &arr.front());
+        REQUIRE(&slice.back() == &arr.back());
+
+        REQUIRE(slice.size() == arr.size());
+        REQUIRE(slice.empty() == arr.empty());
+        REQUIRE(slice.data() == arr.data());
+
+        REQUIRE(std::ranges::equal(slice, arr));
+        REQUIRE(std::ranges::equal(slice.cbegin(), slice.cend(), arr.cbegin(), arr.cend()));
+        REQUIRE(std::ranges::equal(slice | std::views::reverse, arr | std::views::reverse));
+        REQUIRE(std::ranges::equal(slice.crbegin(), slice.crend(), arr.crbegin(), arr.crend()));
+    }
+
+    // Empty ranges are handled correctly
+    {
+        std::array<int, 0> arr{};
+        auto ptr = tcb::ptr<int[]>::pointer_to(arr);
+        auto& slice = ptr->unchecked;
+
+        REQUIRE(slice.size() == 0);
+        REQUIRE(slice.empty());
+        REQUIRE(slice.data() == arr.data());
+
+        REQUIRE(std::ranges::equal(slice, arr));
+    }
+
+    // Slice comparisons work as expected
+    {
+        auto array = std::array{1, 2, 3, 4, 5};
+        auto same_array = array;
+        auto shorter_array = std::array{1, 2, 3, 4};
+        auto different_array = std::array{1, 2, 99, 4, 5};
+
+        auto p_array = tcb::ptr<int[]>::pointer_to(array);
+        auto p_same_array = tcb::ptr<int[]>::pointer_to(same_array);
+        auto p_shorter_array = tcb::ptr<int[]>::pointer_to(shorter_array);
+        auto p_different_array = tcb::ptr<int[]>::pointer_to(different_array);
+
+        auto& s_array = p_array->unchecked;
+        auto& s_same_array = p_same_array->unchecked;
+        auto& s_shorter_array = p_shorter_array->unchecked;
+        auto& s_different_array = p_different_array->unchecked;
+
+        REQUIRE(s_array == s_same_array);
+        REQUIRE(s_array != s_shorter_array);
+        REQUIRE(s_array != s_different_array);
+
+        REQUIRE(s_array <=> s_same_array == std::strong_ordering::equal);
+        REQUIRE(s_array <=> s_shorter_array == std::strong_ordering::greater);
+        REQUIRE(s_shorter_array <=> s_array == std::strong_ordering::less);
+
+        // Float comparison should be partially ordered, and handle nans
+        if (!(compiler_is_msvc && std::is_constant_evaluated())) {
+            float nan = std::numeric_limits<float>::quiet_NaN();
+            float floats[] = {1.0f, nan, 3.0f};
+            auto p_floats = tcb::ptr<float const[]>::pointer_to(floats);
+            auto float_cmp = p_floats->unchecked <=> p_floats->unchecked;
+            static_assert(std::same_as<decltype(float_cmp), std::partial_ordering>);
+            REQUIRE(float_cmp == std::partial_ordering::unordered);
+        }
+
+        // We can compare types without a spaceship operator
+        {
+            no_spaceship ns[] = {{1}, {2}, {3}};
+            auto ptr = tcb::ptr_to_array(ns);
+            auto cmp = ptr->unchecked <=> ptr->unchecked;
+            static_assert(std::same_as<decltype(cmp), std::weak_ordering>);
+            REQUIRE(cmp == std::weak_ordering::equivalent);
+        }
+
+        // Comparison operators are constrained as expected
+        {
+            using incomparable = std::span<int>;
+
+            static_assert(std::equality_comparable<tcb::unchecked_slice<int>>);
+            static_assert(std::equality_comparable<tcb::unchecked_slice<equality_only>>);
+            static_assert(not std::equality_comparable<tcb::unchecked_slice<spaceship_only>>);
+            static_assert(not std::equality_comparable<tcb::unchecked_slice<incomparable>>);
+
+            static_assert(std::three_way_comparable<tcb::unchecked_slice<int>>);
+            static_assert(not std::three_way_comparable<tcb::unchecked_slice<equality_only>>);
+            static_assert(not std::three_way_comparable<tcb::unchecked_slice<spaceship_only>>);
+            static_assert(not std::three_way_comparable<tcb::unchecked_slice<incomparable>>);
+        }
+    }
+
+    return true;
+}
+static_assert(test_unchecked_slice());
 
 /*
  * MARK: array ptr tests
@@ -1038,11 +1181,15 @@ constexpr bool test_array_pointer()
         REQUIRE(ptr2->data() == &val && ptr2->size() == 1);
         REQUIRE(ptr2->at(0) == 99);
 
-        // Can create an array of size zero
+        // Can create an array of size zero with non-null data address
         auto ptr3 = pointer<int[]>::from_address_with_size(array, 0);
         REQUIRE(ptr3->data() == array && ptr3->size() == 0);
 
-        // Passing a null pointer is a runtime error
+        // Can create a null array of size zero
+        auto ptr4 = pointer<int[]>::from_address_with_size((int*)nullptr, 0);
+        REQUIRE(ptr4->data() == nullptr && ptr4->size() == 0);
+
+        // Passing a null pointer with nonzero size is a runtime error
         if (!std::is_constant_evaluated()) {
             REQUIRE_ERROR(pointer<int[]>::from_address_with_size((int*)nullptr, 1));
         }
@@ -1065,7 +1212,11 @@ constexpr bool test_array_pointer()
         auto ptr3 = pointer<int const[]>::from_address_with_size(array, 0);
         REQUIRE(ptr3->data() == array && ptr3->size() == 0);
 
-        // Passing a null pointer is a runtime error
+        // Can create a null array of size zero
+        auto ptr4 = pointer<int const[]>::from_address_with_size((int const*)nullptr, 0);
+        REQUIRE(ptr4->data() == nullptr && ptr4->size() == 0);
+
+        // Passing a null pointer with nonzero size is a runtime error
         if (!std::is_constant_evaluated()) {
             REQUIRE_ERROR(pointer<int const[]>::from_address_with_size((int const*)nullptr, 1));
         }
@@ -1075,6 +1226,9 @@ constexpr bool test_array_pointer()
     {
         std::array arr1{1, 2, 3, 4, 5};
         std::array arr2{6, 7, 8, 9, 10};
+
+        auto p0 = pointer<int[]>();
+        REQUIRE(p0->data() == nullptr && p0->size() == 0);
 
         auto p1 = ptr_to_mut_array(arr1);
         auto p2 = p1; // copy-construct
@@ -1592,6 +1746,32 @@ constexpr bool test_std_optional_specialisation()
         REQUIRE(o1->to_address() == &j);
     }
 
+    // value_or
+    {
+        using Opt = std::optional<pointer<int>>;
+
+        int value = 99;
+        int default_value = 42;
+
+        // lvalue
+        Opt opt = std::nullopt;
+        auto result = opt.value_or(ptr_to_mut(default_value));
+        REQUIRE(result.to_address() == &default_value);
+
+        opt = pointer_to_mut(value);
+        result = opt.value_or(pointer_to_mut(default_value));
+        REQUIRE(result.to_address() == &value);
+
+        // rvalue
+        opt.reset();
+        result = std::move(opt).value_or(ptr_to_mut(default_value));
+        REQUIRE(result.to_address() == &default_value);
+
+        opt = pointer_to_mut(value);
+        result = std::move(opt).value_or(pointer_to_mut(default_value));
+        REQUIRE(result.to_address() == &value);
+    }
+
     // Iterator support
     {
         using Opt = std::optional<tcb::pointer<int>>;
@@ -1625,10 +1805,9 @@ constexpr bool test_std_optional_specialisation()
         REQUIRE(i == 1000);
     }
 
-    // optional<pointer<T[]>> works correctly
+    // optional<pointer<T[]>> specialisation is *not* used
     {
         using Opt = std::optional<tcb::pointer<int[]>>;
-        static_assert(sizeof(Opt) == sizeof(tcb::pointer<int[]>));
 
         Opt opt{};
         REQUIRE(not opt.has_value());
@@ -1643,6 +1822,148 @@ constexpr bool test_std_optional_specialisation()
         std::ranges::fill(**opt, 99);
 
         REQUIRE(std::ranges::all_of(arr, [](int i) { return i == 99; }));
+
+        // Can differentiate between a disenaged optional and one holding
+        // a pointer to an empty array
+        opt = tcb::array_ptr<int>();
+
+        REQUIRE(opt.has_value());
+        REQUIRE((**opt).data() == nullptr);
+        REQUIRE((**opt).size() == 0);
+
+        opt.reset();
+        REQUIRE(not opt.has_value());
+    }
+
+    // Monadic operations
+    {
+        using Opt = std::optional<tcb::pointer<int>>;
+
+        int value = 42;
+        Opt engaged = tcb::pointer_to_mut(value);
+        Opt disengaged = std::nullopt;
+
+        // and_then: engaged and disengaged cases
+        {
+            bool called = false;
+            auto func = [&](auto& p) -> std::optional<int> {
+                called = true;
+                static_assert(std::same_as<decltype(p), tcb::pointer<int>&>);
+                REQUIRE(p.to_address() == &value);
+                return 99;
+            };
+
+            auto result = engaged.and_then(func);
+
+            static_assert(std::same_as<decltype(result), std::optional<int>>);
+            REQUIRE(called);
+            REQUIRE(result.has_value());
+            REQUIRE(*result == 99);
+
+            called = false;
+            auto empty_result = disengaged.and_then(func);
+
+            static_assert(std::same_as<decltype(empty_result), std::optional<int>>);
+            REQUIRE(not called);
+            REQUIRE(not empty_result.has_value());
+        }
+
+        // and_then: const lvalue, rvalue, and const rvalue overloads
+        {
+            auto from_const_lvalue
+                = std::as_const(engaged).and_then([](auto&& p) -> std::optional<int> {
+                      static_assert(std::same_as<decltype(p), tcb::pointer<int> const&>);
+                      return 99;
+                  });
+            REQUIRE(from_const_lvalue.has_value());
+            REQUIRE(*from_const_lvalue == 99);
+
+            auto from_rvalue
+                = Opt(tcb::pointer_to_mut(value)).and_then([](auto&& p) -> std::optional<int> {
+                      static_assert(std::same_as<decltype(p), tcb::pointer<int>&&>);
+                      return 99;
+                  });
+            REQUIRE(from_rvalue.has_value());
+            REQUIRE(*from_rvalue == 99);
+
+            auto from_const_rvalue
+                = std::move(std::as_const(engaged)).and_then([](auto&& p) -> std::optional<int> {
+                      static_assert(std::same_as<decltype(p), tcb::pointer<int> const&&>);
+                      return 99;
+                  });
+            REQUIRE(from_const_rvalue.has_value());
+            REQUIRE(*from_const_rvalue == 99);
+        }
+
+        // transform: engaged and disengaged cases
+        {
+            auto transformed = engaged.transform([](tcb::pointer<int>& p) { return *p * 2; });
+
+            static_assert(std::same_as<decltype(transformed), std::optional<int>>);
+            REQUIRE(transformed.has_value());
+            REQUIRE(*transformed == 84);
+
+            bool called = false;
+            auto empty_result = disengaged.transform([&](auto&) {
+                called = true;
+                return 99;
+            });
+
+            REQUIRE(not called);
+            REQUIRE(not empty_result.has_value());
+        }
+
+        // transform: const lvalue, rvalue, and const rvalue overloads
+        {
+            auto from_const_lvalue = std::as_const(engaged).transform([](auto&& p) {
+                static_assert(std::same_as<decltype(p), tcb::pointer<int> const&>);
+                return 99;
+            });
+            REQUIRE(from_const_lvalue == std::optional<int>{99});
+
+            auto from_rvalue = Opt(tcb::pointer_to_mut(value)).transform([](auto&& p) {
+                static_assert(std::same_as<decltype(p), tcb::pointer<int>&&>);
+                return 99;
+            });
+            REQUIRE(from_rvalue == std::optional<int>{99});
+
+            auto from_const_rvalue = std::move(std::as_const(engaged)).transform([](auto&& p) {
+                static_assert(std::same_as<decltype(p), tcb::pointer<int> const&&>);
+                return 99;
+            });
+            REQUIRE(from_const_rvalue == std::optional<int>{99});
+        }
+
+        // or_else: fallback is called only for disengaged optionals
+        {
+            bool called = false;
+
+            auto present = engaged.or_else([&] {
+                called = true;
+                return Opt(tcb::pointer_to_mut(value));
+            });
+
+            REQUIRE(not called);
+            REQUIRE(present.has_value());
+            REQUIRE(present->to_address() == &value);
+
+            auto absent = disengaged.or_else([&] {
+                called = true;
+                return Opt(tcb::pointer_to_mut(value));
+            });
+
+            REQUIRE(called);
+            REQUIRE(absent.has_value());
+            REQUIRE(absent->to_address() == &value);
+        }
+
+        // or_else: rvalue optionals preserve their value
+        {
+            auto result = Opt(tcb::pointer_to_mut(value)).or_else([] { return Opt{}; });
+
+            REQUIRE(result.has_value());
+            REQUIRE(result->to_address() == &value);
+        }
     }
 
     return true;
@@ -1677,6 +1998,10 @@ int main()
 
     // slice tests
     b = test_slice();
+    REQUIRE(b);
+
+    // unchecked slice tests
+    b = test_unchecked_slice();
     REQUIRE(b);
 
     // array pointer tests

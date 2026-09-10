@@ -42,7 +42,9 @@ DEALINGS IN THE SOFTWARE.
 #    include <compare> // for std::strong_ordering
 #    include <concepts>
 #    include <cstddef>
+#    include <cstdlib>
 #    include <functional> // for std::invoke
+#    include <iterator> // for std::reverse_iterator
 #    include <memory> // for std::addressof
 #    include <optional> // for std::optional<pointer>
 #    include <ranges> // for std::ranges::contiguous_range etc
@@ -82,12 +84,14 @@ DEALINGS IN THE SOFTWARE.
                 std::terminate();                                                          \
             } while (0)
 #    else
-#        if defined(__has_builtin)
+#        if defined(_MSC_VER)
+#            define TCB_PTR_RUNTIME_ERROR(msg) __fastfail(7) // FAST_FAIL_FATAL_APP_EXIT
+#        elif defined(__has_builtin)
 #            if __has_builtin(__builtin_trap)
 #                define TCB_PTR_RUNTIME_ERROR(msg) __builtin_trap()
+#            else
+#                define TCB_PTR_RUNTIME_ERROR(msg) std::abort()
 #            endif
-#        elif defined(_MSC_VER)
-#            define TCB_PTR_RUNTIME_ERROR(msg) __fastfail(7) // FAST_FAIL_FATAL_APP_EXIT
 #        else
 #            define TCB_PTR_RUNTIME_ERROR(msg) std::abort()
 #        endif
@@ -104,6 +108,18 @@ DEALINGS IN THE SOFTWARE.
 #    define TCB_PTR_THROW(ex) throw ex
 #else
 #    define TCB_PTR_THROW(ex) TCB_PTR_RUNTIME_ERROR(ex.what())
+#endif
+
+#if !defined(TCB_PTR_OPTIONAL_MONADIC_SUPPORT)
+#    if __cpp_lib_optional >= 202110L
+#        define TCB_PTR_OPTIONAL_MONADIC_SUPPORT 1
+#    endif
+#endif
+
+#if !defined(TCB_PTR_OPTIONAL_RANGE_SUPPORT)
+#    if __cpp_lib_optional_range_support >= 202406L
+#        define TCB_PTR_OPTIONAL_RANGE_SUPPORT 1
+#    endif
 #endif
 
 namespace tcb {
@@ -154,8 +170,6 @@ public:
 
     constexpr explicit operator T*() const noexcept { return addr_; }
 
-    constexpr explicit operator bool() const noexcept { return addr_ != nullptr; }
-
 #ifdef __cpp_multidimensional_subscript
     constexpr auto operator[]() const noexcept -> T& { return *addr_; }
 #endif
@@ -168,7 +182,7 @@ public:
 
     friend constexpr auto operator==(pointer lhs, pointer rhs) -> bool
     {
-        return std::compare_three_way{}(lhs.addr_, rhs.addr_) == 0;
+        return std::ranges::equal_to{}(lhs.addr_, rhs.addr_);
     }
 
     friend constexpr auto operator<=>(pointer lhs, pointer rhs) -> std::strong_ordering
@@ -279,9 +293,10 @@ public:
         return static_cast<U*>(this->addr_);
     }
 
-    explicit operator bool() const noexcept { return this->addr_ != nullptr; }
-
-    friend auto operator==(pointer lhs, pointer rhs) -> bool { return lhs.addr_ == rhs.addr_; }
+    friend auto operator==(pointer lhs, pointer rhs) -> bool
+    {
+        return std::ranges::equal_to{}(lhs.addr_, rhs.addr_);
+    }
 
     friend auto operator<=>(pointer lhs, pointer rhs) -> std::strong_ordering
     {
@@ -297,10 +312,20 @@ template <typename T>
 struct TCB_PTR_GSL_POINTER(T) checked_iterator {
 private:
     T* start_ = nullptr;
-    std::ptrdiff_t pos_ = 0;
-    std::ptrdiff_t size_ = 0;
+    std::size_t pos_ = 0;
+    std::size_t sz_ = 0;
 
     friend struct checked_iterator<std::add_const_t<T>>;
+
+    constexpr explicit checked_iterator(T* start, std::size_t pos, std::size_t size)
+        : start_(start), pos_(pos), sz_(size)
+    {
+    }
+
+    struct buffer_t {
+        T* start_addr;
+        std::size_t size;
+    };
 
 public:
     using value_type = T;
@@ -308,19 +333,21 @@ public:
     using difference_type = std::ptrdiff_t;
     using iterator_category = std::contiguous_iterator_tag;
 
-    checked_iterator() = default;
-
-    constexpr explicit checked_iterator(T* start, std::ptrdiff_t pos, std::ptrdiff_t size)
-        : start_(start), pos_(pos), size_(size)
+    static constexpr auto to_start_of(buffer_t buf) -> checked_iterator
     {
-        if (pos_ < 0 || pos_ > size_) {
-            TCB_PTR_RUNTIME_ERROR("Bad size or position in checked_iterator ctor");
-        }
+        return checked_iterator(buf.start_addr, 0, buf.size);
     }
+
+    static constexpr auto to_end_of(buffer_t buf) -> checked_iterator
+    {
+        return checked_iterator(buf.start_addr, buf.size, buf.size);
+    }
+
+    checked_iterator() = default;
 
     constexpr checked_iterator(checked_iterator<std::remove_const_t<T>> const& other)
         requires(std::is_const_v<T>)
-        : start_(other.start_), pos_(other.pos_), size_(other.size_)
+        : start_(other.start_), pos_(other.pos_), sz_(other.sz_)
     {
     }
 
@@ -332,27 +359,30 @@ public:
 
     constexpr auto operator*() const -> reference
     {
-        if (pos_ == size_) {
-            TCB_PTR_RUNTIME_ERROR("Cannot dereference past-the-end iterator");
+        if (pos_ >= sz_) {
+            TCB_PTR_RUNTIME_ERROR("Cannot dereference out-of-bounds iterator");
         }
         return start_[pos_];
     }
 
     constexpr auto operator[](difference_type idx) const -> reference
     {
-        if (idx >= (size_ - pos_) || idx < -pos_) {
-            TCB_PTR_RUNTIME_ERROR("Out of bounds random-access read");
+        if ((pos_ + static_cast<std::size_t>(idx)) >= sz_) {
+            TCB_PTR_RUNTIME_ERROR("Cannot dereference out-of-bounds iterator");
         }
-        return start_[pos_ + idx];
+        return start_[pos_ + static_cast<std::size_t>(idx)];
     }
 
-    constexpr auto operator->() const -> T* { return start_ + pos_; }
+    constexpr auto operator->() const -> T*
+    {
+        if (pos_ > sz_) {
+            TCB_PTR_RUNTIME_ERROR("Cannot form pointer from out-of-bounds iterator");
+        }
+        return start_ + pos_;
+    }
 
     constexpr auto operator++() -> checked_iterator&
     {
-        if (pos_ == size_) {
-            TCB_PTR_RUNTIME_ERROR("Cannot increment past-the-end iterator");
-        }
         ++pos_;
         return *this;
     }
@@ -366,9 +396,6 @@ public:
 
     constexpr auto operator--() -> checked_iterator&
     {
-        if (pos_ == 0) {
-            TCB_PTR_RUNTIME_ERROR("Cannot decrement start iterator");
-        }
         --pos_;
         return *this;
     }
@@ -382,19 +409,13 @@ public:
 
     constexpr auto operator+=(difference_type offset) -> checked_iterator&
     {
-        if (offset > (size_ - pos_) || offset < -pos_) {
-            TCB_PTR_RUNTIME_ERROR("Out of bounds random-access jump");
-        }
-        pos_ += offset;
+        pos_ += static_cast<std::size_t>(offset);
         return *this;
     }
 
     constexpr auto operator-=(difference_type offset) -> checked_iterator&
     {
-        if (offset < (pos_ - size_) || offset > pos_) {
-            TCB_PTR_RUNTIME_ERROR("Out of bounds random-access jump");
-        }
-        pos_ -= offset;
+        pos_ -= static_cast<std::size_t>(offset);
         return *this;
     }
 
@@ -416,7 +437,7 @@ public:
     friend constexpr auto operator-(checked_iterator const& lhs, checked_iterator const& rhs)
         -> difference_type
     {
-        return lhs.pos_ - rhs.pos_;
+        return static_cast<difference_type>(lhs.pos_) - static_cast<difference_type>(rhs.pos_);
     }
 
     friend auto operator==(checked_iterator const&, checked_iterator const&) -> bool = default;
@@ -424,51 +445,119 @@ public:
         -> std::strong_ordering = default;
 };
 
-#ifndef TCB_PTR_USE_UNCHECKED_ITERATORS
-template <typename T>
-using contiguous_iterator_t = checked_iterator<T>;
-#else
-template <typename T>
-using contiguous_iterator_t = T*;
-#endif
-
-template <typename T>
-constexpr auto make_begin_iterator(T* addr, std::size_t size [[maybe_unused]])
-    -> contiguous_iterator_t<T>
-{
-#ifndef TCB_PTR_USE_UNCHECKED_ITERATORS
-    return checked_iterator<T>(addr, 0, static_cast<std::ptrdiff_t>(size));
-#else
-    return addr;
-#endif
-}
-
-template <typename T>
-constexpr auto make_end_iterator(T* addr, std::size_t size) -> contiguous_iterator_t<T>
-{
-#ifndef TCB_PTR_USE_UNCHECKED_ITERATORS
-    return checked_iterator<T>(addr, static_cast<std::ptrdiff_t>(size),
-                               static_cast<std::ptrdiff_t>(size));
-#else
-    return addr + size;
-#endif
-}
-
 } // namespace detail
 
-// MARK: Slice
+// MARK: Unchecked slice
 
 TCB_PTR_EXPORT template <typename T>
-    requires(std::is_object_v<T> && !std::is_const_v<T>)
-struct TCB_PTR_GSL_POINTER(T) slice {
+struct TCB_PTR_GSL_POINTER(T) slice;
+
+TCB_PTR_EXPORT template <typename T>
+struct TCB_PTR_GSL_POINTER(T) unchecked_slice {
 private:
+    static_assert(std::is_object_v<T> && !std::is_const_v<T>,
+                  "slice element must be a non-const object type");
+
     T* addr_;
     std::size_t sz_;
 
+    friend struct slice<T>;
+
+    constexpr explicit unchecked_slice(T* addr, std::size_t sz) : addr_(addr), sz_(sz) { }
+
+    unchecked_slice(unchecked_slice const&) = default;
+    auto operator=(unchecked_slice const&) -> unchecked_slice& = default;
+
+public:
+    using value_type = T;
+    using size_type = std::size_t;
+    using difference_type = std::ptrdiff_t;
+    using reference = T&;
+    using const_reference = T const&;
+    using pointer = value_type*;
+    using const_pointer = value_type const*;
+    using iterator = pointer;
+    using const_iterator = const_pointer;
+    using reverse_iterator = std::reverse_iterator<iterator>;
+    using const_reverse_iterator = std::reverse_iterator<const_iterator>;
+
+    constexpr auto operator[](size_type idx) -> reference { return addr_[idx]; }
+
+    constexpr auto operator[](size_type idx) const -> const_reference { return addr_[idx]; }
+
+    constexpr auto front() -> reference { return addr_[0]; }
+    constexpr auto front() const -> const_reference { return addr_[0]; }
+
+    constexpr auto back() -> reference { return addr_[sz_ - 1]; }
+    constexpr auto back() const -> const_reference { return addr_[sz_ - 1]; }
+
+    constexpr auto size() const -> size_type { return sz_; }
+    constexpr auto empty() const -> bool { return sz_ == 0; }
+
+    constexpr auto data() -> pointer { return addr_; }
+    constexpr auto data() const -> const_pointer { return addr_; }
+
+    constexpr auto begin() -> iterator { return addr_; }
+    constexpr auto begin() const -> const_iterator { return addr_; }
+    constexpr auto cbegin() const -> const_iterator { return begin(); }
+
+    constexpr auto end() -> iterator { return addr_ + sz_; }
+    constexpr auto end() const -> const_iterator { return addr_ + sz_; }
+    constexpr auto cend() const -> const_iterator { return end(); }
+
+    constexpr auto rbegin() -> reverse_iterator { return reverse_iterator(end()); }
+    constexpr auto rbegin() const -> const_reverse_iterator
+    {
+        return const_reverse_iterator(end());
+    }
+    constexpr auto crbegin() const -> const_reverse_iterator { return rbegin(); }
+
+    constexpr auto rend() -> reverse_iterator { return reverse_iterator(begin()); }
+    constexpr auto rend() const -> const_reverse_iterator
+    {
+        return const_reverse_iterator(begin());
+    }
+    constexpr auto crend() const -> const_reverse_iterator { return rend(); }
+
+    friend constexpr auto operator==(unchecked_slice const& lhs, unchecked_slice const& rhs) -> bool
+        requires(std::equality_comparable<T> && !std::is_array_v<T>)
+    {
+        return std::ranges::equal(lhs, rhs);
+    }
+
+    friend constexpr auto operator<=>(unchecked_slice const& lhs, unchecked_slice const& rhs)
+        requires(std::totally_ordered<T> && !std::is_array_v<T>)
+    {
+        auto cmp = [](const_reference lhs, const_reference rhs) {
+            if constexpr (std::three_way_comparable<T>) {
+                return lhs <=> rhs;
+            } else {
+                if (lhs == rhs) {
+                    return std::weak_ordering::equivalent;
+                } else if (lhs < rhs) {
+                    return std::weak_ordering::less;
+                } else {
+                    return std::weak_ordering::greater;
+                }
+            }
+        };
+        return std::lexicographical_compare_three_way(lhs.begin(), lhs.end(), rhs.begin(),
+                                                      rhs.end(), cmp);
+    }
+};
+
+// MARK: Slice
+
+template <typename T>
+struct slice {
+
+    unchecked_slice<T> unchecked;
+
+private:
     friend struct pointer<T[]>;
     friend struct pointer<T const[]>;
 
-    constexpr explicit slice(T* addr, std::size_t sz) : addr_(addr), sz_(sz) { }
+    constexpr explicit slice(T* addr, std::size_t sz) : unchecked(addr, sz) { }
 
     slice(slice const&) = default;
     auto operator=(slice const&) -> slice& = default;
@@ -481,90 +570,99 @@ public:
     using const_reference = T const&;
     using pointer = value_type*;
     using const_pointer = value_type const*;
-    using iterator = detail::contiguous_iterator_t<value_type>;
-    using const_iterator = detail::contiguous_iterator_t<value_type const>;
+    using iterator = detail::checked_iterator<value_type>;
+    using const_iterator = detail::checked_iterator<value_type const>;
     using reverse_iterator = std::reverse_iterator<iterator>;
     using const_reverse_iterator = std::reverse_iterator<const_iterator>;
 
     constexpr auto operator[](size_type idx) -> reference
     {
-        if (idx >= sz_) {
+        if (idx >= unchecked.sz_) {
             TCB_PTR_RUNTIME_ERROR("Index out of bounds in slice access");
         }
-        return addr_[idx];
+        return unchecked.addr_[idx];
     }
 
     constexpr auto operator[](size_type idx) const -> const_reference
     {
-        if (idx >= sz_) {
+        if (idx >= unchecked.sz_) {
             TCB_PTR_RUNTIME_ERROR("Index out of bounds in slice access");
         }
-        return addr_[idx];
+        return unchecked.addr_[idx];
     }
 
     constexpr auto at(size_type idx) -> reference
     {
-        if (idx >= sz_) {
+        if (idx >= unchecked.sz_) {
             TCB_PTR_THROW(std::out_of_range("Index out of bounds in slice access"));
         }
-        return addr_[idx];
+        return unchecked.addr_[idx];
     }
 
     constexpr auto at(size_type idx) const -> const_reference
     {
-        if (idx >= sz_) {
+        if (idx >= unchecked.sz_) {
             TCB_PTR_THROW(std::out_of_range("Index out of bounds in slice access"));
         }
-        return addr_[idx];
+        return unchecked.addr_[idx];
     }
 
     constexpr auto front() -> reference
     {
-        if (sz_ == 0) {
+        if (unchecked.sz_ == 0) {
             TCB_PTR_RUNTIME_ERROR("Accessing front of empty slice");
         }
-        return addr_[0];
+        return unchecked.addr_[0];
     }
 
     constexpr auto front() const -> const_reference
     {
-        if (sz_ == 0) {
+        if (unchecked.sz_ == 0) {
             TCB_PTR_RUNTIME_ERROR("Accessing front of empty slice");
         }
-        return addr_[0];
+        return unchecked.addr_[0];
     }
 
     constexpr auto back() -> reference
     {
-        if (sz_ == 0) {
+        if (unchecked.sz_ == 0) {
             TCB_PTR_RUNTIME_ERROR("Accessing back of empty slice");
         }
-        return addr_[sz_ - 1];
+        return unchecked.addr_[unchecked.sz_ - 1];
     }
 
     constexpr auto back() const -> const_reference
     {
-        if (sz_ == 0) {
+        if (unchecked.sz_ == 0) {
             TCB_PTR_RUNTIME_ERROR("Accessing back of empty slice");
         }
-        return addr_[sz_ - 1];
+        return unchecked.addr_[unchecked.sz_ - 1];
     }
 
-    constexpr auto size() const -> size_type { return sz_; }
-    constexpr auto empty() const -> bool { return sz_ == 0; }
+    constexpr auto size() const -> size_type { return unchecked.sz_; }
+    constexpr auto empty() const -> bool { return unchecked.sz_ == 0; }
 
-    constexpr auto data() -> pointer { return addr_; }
-    constexpr auto data() const -> const_pointer { return addr_; }
+    constexpr auto data() -> pointer { return unchecked.addr_; }
+    constexpr auto data() const -> const_pointer { return unchecked.addr_; }
 
-    constexpr auto begin() -> iterator { return detail::make_begin_iterator(addr_, sz_); }
+    constexpr auto begin() -> iterator
+    {
+        return iterator::to_start_of({.start_addr = data(), .size = size()});
+    }
     constexpr auto begin() const -> const_iterator
     {
-        return detail::make_begin_iterator(addr_, sz_);
+        return const_iterator::to_start_of({.start_addr = data(), .size = size()});
     }
     constexpr auto cbegin() const -> const_iterator { return begin(); }
 
-    constexpr auto end() -> iterator { return detail::make_end_iterator(addr_, sz_); }
-    constexpr auto end() const -> const_iterator { return detail::make_end_iterator(addr_, sz_); }
+    constexpr auto end() -> iterator
+    {
+        return iterator::to_end_of({.start_addr = data(), .size = size()});
+    }
+    constexpr auto end() const -> const_iterator
+    {
+        return const_iterator::to_end_of({.start_addr = data(), .size = size()});
+    }
     constexpr auto cend() const -> const_iterator { return end(); }
 
     constexpr auto rbegin() -> reverse_iterator { return reverse_iterator(end()); }
@@ -582,30 +680,12 @@ public:
     constexpr auto crend() const -> const_reverse_iterator { return rend(); }
 
     friend constexpr auto operator==(slice const& lhs, slice const& rhs) -> bool
-        requires std::equality_comparable<T>
-    {
-        return std::ranges::equal(lhs, rhs);
-    }
+        requires(std::equality_comparable<T> && !std::is_array_v<T>)
+    = default;
 
     friend constexpr auto operator<=>(slice const& lhs, slice const& rhs)
-        requires std::totally_ordered<T>
-    {
-        auto cmp = [](const_reference lhs, const_reference rhs) {
-            if constexpr (std::three_way_comparable<T>) {
-                return lhs <=> rhs;
-            } else {
-                if (lhs < rhs) {
-                    return std::weak_ordering::less;
-                } else if (rhs < lhs) {
-                    return std::weak_ordering::greater;
-                } else {
-                    return std::weak_ordering::equivalent;
-                }
-            }
-        };
-        return std::lexicographical_compare_three_way(lhs.begin(), lhs.end(), rhs.begin(),
-                                                      rhs.end(), cmp);
-    }
+        requires(std::totally_ordered<T> && !std::is_array_v<T>)
+    = default;
 };
 
 // MARK: Array pointer
@@ -624,11 +704,6 @@ struct TCB_PTR_GSL_POINTER(T) pointer<T[]> {
 private:
     using slice_type = slice<std::remove_const_t<T>>;
     mutable slice_type slice_ = slice_type(nullptr, 0);
-
-    friend class std::optional<pointer<T[]>>;
-
-    // Secret nullptr constructor for use by optional
-    constexpr pointer(std::nullptr_t) noexcept { }
 
     constexpr explicit pointer(T* ptr, std::size_t sz)
         : slice_(const_cast<std::remove_const_t<T>*>(ptr), sz)
@@ -651,11 +726,14 @@ public:
     static constexpr auto from_address_with_size(U* ptr TCB_PTR_LIFETIME_BOUND, std::size_t sz)
         -> pointer
     {
-        if (ptr == nullptr) {
-            TCB_PTR_RUNTIME_ERROR("Null pointer passed to from_address_with_size()");
+        if (ptr == nullptr && sz > 0) {
+            TCB_PTR_RUNTIME_ERROR(
+                "Null pointer and nonzero size passed to from_address_with_size()");
         }
         return pointer(ptr, sz);
     }
+
+    pointer() = default;
 
     pointer(pointer const&) = default;
 
@@ -687,8 +765,6 @@ public:
         return std::addressof(slice_);
     }
     void operator->() const&& = delete;
-
-    constexpr explicit operator bool() const noexcept { return slice_.addr_ != nullptr; }
 
     friend constexpr auto operator==(pointer const& lhs, pointer const& rhs) -> bool
     {
@@ -847,6 +923,9 @@ TCB_PTR_EXPORT inline constexpr auto& ptr_to_mut_array = pointer_to_mut_array;
 } // namespace tcb
 
 template <typename T>
+constexpr bool std::ranges::enable_borrowed_range<tcb::unchecked_slice<T>> = true;
+
+template <typename T>
 constexpr bool std::ranges::enable_borrowed_range<tcb::slice<T>> = true;
 
 namespace std {
@@ -870,17 +949,35 @@ struct hash<tcb::pointer<T>> {
     }
 };
 
+} // namespace std
+
+namespace tcb::detail {
+
+template <typename>
+inline constexpr bool is_optional_v = false;
+
+template <typename T>
+inline constexpr bool is_optional_v<std::optional<T>> = true;
+
+} // namespace tcb::detail
+
+namespace std {
+
 // MARK: std::optional
 
 template <typename T>
+    requires(!std::is_unbounded_array_v<T>)
 class optional<tcb::pointer<T>> {
 private:
     tcb::pointer<T> ptr_;
 
 public:
     using value_type = tcb::pointer<T>;
-    using iterator = tcb::detail::contiguous_iterator_t<value_type>;
-    using const_iterator = tcb::detail::contiguous_iterator_t<value_type const>;
+
+#ifdef TCB_PTR_OPTIONAL_RANGE_SUPPORT
+    using iterator = tcb::detail::checked_iterator<value_type>;
+    using const_iterator = tcb::detail::checked_iterator<value_type const>;
+#endif
 
     /*
      * Constructors
@@ -1037,25 +1134,31 @@ public:
     /*
      * Iterator support
      */
+#ifdef TCB_PTR_OPTIONAL_RANGE_SUPPORT
     constexpr auto begin() noexcept -> iterator
     {
-        return tcb::detail::make_begin_iterator(std::addressof(ptr_), has_value() ? 1 : 0);
+        return iterator::to_start_of(
+            {.start_addr = std::addressof(ptr_), .size = has_value() ? 1u : 0u});
     }
 
     constexpr auto begin() const noexcept -> const_iterator
     {
-        return tcb::detail::make_begin_iterator(std::addressof(ptr_), has_value() ? 1 : 0);
+        return const_iterator::to_start_of(
+            {.start_addr = std::addressof(ptr_), .size = has_value() ? 1u : 0u});
     }
 
     constexpr auto end() noexcept -> iterator
     {
-        return tcb::detail::make_end_iterator(std::addressof(ptr_), has_value() ? 1 : 0);
+        return iterator::to_end_of(
+            {.start_addr = std::addressof(ptr_), .size = has_value() ? 1u : 0u});
     }
 
     constexpr auto end() const noexcept -> const_iterator
     {
-        return tcb::detail::make_end_iterator(std::addressof(ptr_), has_value() ? 1 : 0);
+        return const_iterator::to_end_of(
+            {.start_addr = std::addressof(ptr_), .size = has_value() ? 1u : 0u});
     }
+#endif
 
     /*
      * Observers
@@ -1108,7 +1211,7 @@ public:
         return std::move(ptr_);
     }
 
-    constexpr auto has_value() const noexcept -> bool { return static_cast<bool>(ptr_); }
+    constexpr auto has_value() const noexcept -> bool { return ptr_.to_address() != nullptr; }
     constexpr explicit operator bool() const noexcept { return has_value(); }
 
     constexpr auto value() & -> tcb::pointer<T>&
@@ -1144,9 +1247,10 @@ public:
     }
 
     template <typename U = tcb::pointer<T>>
-        requires std::is_convertible_v<U&&, tcb::pointer<T>>
     constexpr auto value_or(U&& default_value) const& -> tcb::pointer<T>
     {
+        static_assert(std::is_convertible_v<U&&, tcb::pointer<T>>);
+
         if (has_value()) {
             return ptr_;
         } else {
@@ -1155,9 +1259,10 @@ public:
     }
 
     template <typename U = tcb::pointer<T>>
-        requires std::is_convertible_v<U&&, tcb::pointer<T>>
     constexpr auto value_or(U&& default_value) && -> tcb::pointer<T>
     {
+        static_assert(std::is_convertible_v<U&&, tcb::pointer<T>>);
+
         if (has_value()) {
             return std::move(ptr_);
         } else {
@@ -1168,36 +1273,46 @@ public:
     /*
      * Monadic operations
      */
+#ifdef TCB_PTR_OPTIONAL_MONADIC_SUPPORT
     template <typename F>
-        requires invocable<F, tcb::pointer<T>&>
     constexpr auto and_then(F&& f) &
     {
+        static_assert(invocable<F, tcb::pointer<T>&>);
+        using R = invoke_result_t<F, tcb::pointer<T>&>;
+        static_assert(tcb::detail::is_optional_v<R>);
+
         if (has_value()) {
-            return std::invoke(static_cast<F&&>(f), ptr_);
+            return std::invoke(static_cast<F&&>(f), value());
         } else {
-            return remove_cvref_t<invoke_result_t<F, tcb::pointer<T>&>>{};
+            return remove_cvref_t<R>{};
         }
     }
 
     template <typename F>
-        requires invocable<F, tcb::pointer<T> const&>
     constexpr auto and_then(F&& f) const&
     {
+        static_assert(invocable<F, tcb::pointer<T> const&>);
+        using R = invoke_result_t<F, tcb::pointer<T> const&>;
+        static_assert(tcb::detail::is_optional_v<R>);
+
         if (has_value()) {
-            return std::invoke(static_cast<F&&>(f), ptr_);
+            return std::invoke(static_cast<F&&>(f), value());
         } else {
-            return remove_cvref_t<invoke_result_t<F, tcb::pointer<T> const&>>{};
+            return remove_cvref_t<R>{};
         }
     }
 
     template <typename F>
-        requires invocable<F, tcb::pointer<T>&&>
     constexpr auto and_then(F&& f) &&
     {
+        static_assert(invocable<F, tcb::pointer<T>&&>);
+        using R = invoke_result_t<F, tcb::pointer<T>&&>;
+        static_assert(tcb::detail::is_optional_v<R>);
+
         if (has_value()) {
-            return std::invoke(static_cast<F&&>(f), std::move(ptr_));
+            return std::invoke(static_cast<F&&>(f), std::move(value()));
         } else {
-            return remove_cvref_t<invoke_result_t<F, tcb::pointer<T>&&>>{};
+            return remove_cvref_t<R>{};
         }
     }
 
@@ -1205,61 +1320,87 @@ public:
         requires invocable<F, tcb::pointer<T> const&&>
     constexpr auto and_then(F&& f) const&&
     {
+        static_assert(invocable<F, tcb::pointer<T> const&&>);
+        using R = invoke_result_t<F, tcb::pointer<T> const&&>;
+        static_assert(tcb::detail::is_optional_v<R>);
+
         if (has_value()) {
-            return std::invoke(static_cast<F&&>(f), std::move(ptr_));
+            return std::invoke(static_cast<F&&>(f), std::move(value()));
         } else {
-            return remove_cvref_t<invoke_result_t<F, tcb::pointer<T> const&&>>{};
+            return remove_cvref_t<R>{};
         }
     }
 
-    template <typename F, typename U = remove_cvref_t<invoke_result_t<F, tcb::pointer<T>&>>>
-        requires(!same_as<U, in_place_t> && !same_as<U, nullopt_t>)
-    constexpr auto transform(F&& f) & -> optional<U>
+    template <typename F>
+    constexpr auto transform(F&& f) &
     {
-        if (has_value()) {
-            return optional<U>(std::invoke(static_cast<F&&>(f), ptr_));
-        } else {
-            return optional<U>{};
-        }
-    }
+        static_assert(invocable<F, tcb::pointer<T>&>);
+        using U = remove_cvref_t<invoke_result_t<F, tcb::pointer<T>&>>;
+        static_assert(is_object_v<U> && !is_array_v<U>);
+        static_assert(!is_same_v<U, in_place_t>);
+        static_assert(!is_same_v<U, nullopt_t>);
 
-    template <typename F, typename U = remove_cvref_t<invoke_result_t<F, tcb::pointer<T> const&>>>
-        requires(!same_as<U, in_place_t> && !same_as<U, nullopt_t>)
-    constexpr auto transform(F&& f) const& -> optional<U>
-    {
         if (has_value()) {
-            return optional<U>(std::invoke(static_cast<F&&>(f), ptr_));
-        } else {
-            return optional<U>{};
-        }
-    }
-
-    template <typename F, typename U = remove_cvref_t<invoke_result_t<F, tcb::pointer<T>&&>>>
-        requires(!same_as<U, in_place_t> && !same_as<U, nullopt_t>)
-    constexpr auto transform(F&& f) && -> optional<U>
-    {
-        if (has_value()) {
-            return optional<U>(std::invoke(static_cast<F&&>(f), std::move(ptr_)));
-        } else {
-            return optional<U>{};
-        }
-    }
-
-    template <typename F, typename U = remove_cvref_t<invoke_result_t<F, tcb::pointer<T> const&&>>>
-        requires(!same_as<U, in_place_t> && !same_as<U, nullopt_t>)
-    constexpr auto transform(F&& f) const&& -> optional<U>
-    {
-        if (has_value()) {
-            return optional<U>(std::invoke(static_cast<F&&>(f), std::move(ptr_)));
+            return optional<U>(in_place, std::invoke(static_cast<F&&>(f), **this));
         } else {
             return optional<U>{};
         }
     }
 
     template <typename F>
-        requires invocable<F> && same_as<invoke_result_t<F>, optional>
+    constexpr auto transform(F&& f) const&
+    {
+        static_assert(invocable<F, tcb::pointer<T> const&>);
+        using U = remove_cvref_t<invoke_result_t<F, tcb::pointer<T> const&>>;
+        static_assert(is_object_v<U> && !is_array_v<U>);
+        static_assert(!is_same_v<U, in_place_t>);
+        static_assert(!is_same_v<U, nullopt_t>);
+
+        if (has_value()) {
+            return optional<U>(in_place, std::invoke(static_cast<F&&>(f), **this));
+        } else {
+            return optional<U>{};
+        }
+    }
+
+    template <typename F>
+    constexpr auto transform(F&& f) &&
+    {
+        static_assert(invocable<F, tcb::pointer<T>>);
+        using U = remove_cvref_t<invoke_result_t<F, tcb::pointer<T>>>;
+        static_assert(is_object_v<U> && !is_array_v<U>);
+        static_assert(!is_same_v<U, in_place_t>);
+        static_assert(!is_same_v<U, nullopt_t>);
+
+        if (has_value()) {
+            return optional<U>(in_place, std::invoke(static_cast<F&&>(f), std::move(**this)));
+        } else {
+            return optional<U>{};
+        }
+    }
+
+    template <typename F>
+    constexpr auto transform(F&& f) const&&
+    {
+        static_assert(invocable<F, tcb::pointer<T> const>);
+        using U = remove_cvref_t<invoke_result_t<F, tcb::pointer<T> const>>;
+        static_assert(is_object_v<U> && !is_array_v<U>);
+        static_assert(!is_same_v<U, in_place_t>);
+        static_assert(!is_same_v<U, nullopt_t>);
+
+        if (has_value()) {
+            return optional<U>(in_place, std::invoke(static_cast<F&&>(f), std::move(**this)));
+        } else {
+            return optional<U>{};
+        }
+    }
+
+    template <typename F>
+        requires invocable<F>
     constexpr auto or_else(F&& f) const& -> optional
     {
+        static_assert(is_same_v<invoke_result_t<F>, optional>);
+
         if (has_value()) {
             return *this;
         } else {
@@ -1268,15 +1409,18 @@ public:
     }
 
     template <typename F>
-        requires invocable<F> && same_as<invoke_result_t<F>, optional>
+        requires invocable<F>
     constexpr auto or_else(F&& f) && -> optional
     {
+        static_assert(is_same_v<invoke_result_t<F>, optional>);
+
         if (has_value()) {
             return std::move(*this);
         } else {
             return std::invoke(static_cast<F&&>(f));
         }
     }
+#endif // TCB_PTR_OPTIONAL_MONADIC_SUPPORT
 
     /*
      * Modifiers
