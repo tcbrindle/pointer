@@ -110,6 +110,12 @@ DEALINGS IN THE SOFTWARE.
 #    define TCB_PTR_THROW(ex) TCB_PTR_RUNTIME_ERROR(ex.what())
 #endif
 
+#if !defined(TCB_PTR_OPTIONAL_RANGE_SUPPORT)
+#    if __cpp_lib_optional_range_support >= 202406L
+#        define TCB_PTR_OPTIONAL_RANGE_SUPPORT 1
+#    endif
+#endif
+
 namespace tcb {
 
 // MARK: Object pointer
@@ -947,8 +953,11 @@ private:
 
 public:
     using value_type = tcb::pointer<T>;
+
+#ifdef TCB_PTR_OPTIONAL_RANGE_SUPPORT
     using iterator = tcb::detail::checked_iterator<value_type>;
     using const_iterator = tcb::detail::checked_iterator<value_type const>;
+#endif
 
     /*
      * Constructors
@@ -1105,6 +1114,7 @@ public:
     /*
      * Iterator support
      */
+#ifdef TCB_PTR_OPTIONAL_RANGE_SUPPORT
     constexpr auto begin() noexcept -> iterator
     {
         return iterator::to_start_of(
@@ -1128,6 +1138,7 @@ public:
         return const_iterator::to_end_of(
             {.start_addr = std::addressof(ptr_), .size = has_value() ? 1u : 0u});
     }
+#endif
 
     /*
      * Observers
