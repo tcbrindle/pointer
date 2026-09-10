@@ -119,14 +119,21 @@ constexpr bool test_pointer_static_properties()
 
     // I know arrays of unknown bound are technically objects, but...
     constexpr bool is_object = std::is_object_v<T> && !std::is_unbounded_array_v<T>;
+    constexpr bool is_array = std::is_unbounded_array_v<T>;
 
     // pointer to object is the same size as T*
     if constexpr (is_object) {
         static_assert(sizeof(P) == sizeof(T*));
     }
 
-    static_assert(not std::is_default_constructible_v<P>);
-    static_assert(not std::default_initializable<P>);
+    // array pointers are default constructible, but object pointers are not
+    if constexpr (is_array) {
+        static_assert(std::is_default_constructible_v<P>);
+        static_assert(std::default_initializable<P>);
+    } else {
+        static_assert(not std::is_default_constructible_v<P>);
+        static_assert(not std::default_initializable<P>);
+    }
 
     // pointer<T> is copyable, movable, etc (type traits)
     static_assert(std::is_copy_constructible_v<P>);
@@ -178,7 +185,7 @@ constexpr bool test_pointer_static_properties()
     }
 
     // P::to_address() returns the correct type for non-arrays
-    if constexpr (!std::is_unbounded_array_v<T>) {
+    if constexpr (!is_array) {
         static_assert(std::same_as<decltype(std::declval<P&>().to_address()), T*>);
     }
 
@@ -1144,11 +1151,15 @@ constexpr bool test_array_pointer()
         REQUIRE(ptr2->data() == &val && ptr2->size() == 1);
         REQUIRE(ptr2->at(0) == 99);
 
-        // Can create an array of size zero
+        // Can create an array of size zero with non-null data address
         auto ptr3 = pointer<int[]>::from_address_with_size(array, 0);
         REQUIRE(ptr3->data() == array && ptr3->size() == 0);
 
-        // Passing a null pointer is a runtime error
+        // Can create a null array of size zero
+        auto ptr4 = pointer<int[]>::from_address_with_size((int*)nullptr, 0);
+        REQUIRE(ptr4->data() == nullptr && ptr4->size() == 0);
+
+        // Passing a null pointer with nonzero size is a runtime error
         if (!std::is_constant_evaluated()) {
             REQUIRE_ERROR(pointer<int[]>::from_address_with_size((int*)nullptr, 1));
         }
@@ -1171,7 +1182,11 @@ constexpr bool test_array_pointer()
         auto ptr3 = pointer<int const[]>::from_address_with_size(array, 0);
         REQUIRE(ptr3->data() == array && ptr3->size() == 0);
 
-        // Passing a null pointer is a runtime error
+        // Can create a null array of size zero
+        auto ptr4 = pointer<int const[]>::from_address_with_size((int const*)nullptr, 0);
+        REQUIRE(ptr4->data() == nullptr && ptr4->size() == 0);
+
+        // Passing a null pointer with nonzero size is a runtime error
         if (!std::is_constant_evaluated()) {
             REQUIRE_ERROR(pointer<int const[]>::from_address_with_size((int const*)nullptr, 1));
         }
@@ -1181,6 +1196,9 @@ constexpr bool test_array_pointer()
     {
         std::array arr1{1, 2, 3, 4, 5};
         std::array arr2{6, 7, 8, 9, 10};
+
+        auto p0 = pointer<int[]>();
+        REQUIRE(p0->data() == nullptr && p0->size() == 0);
 
         auto p1 = ptr_to_mut_array(arr1);
         auto p2 = p1; // copy-construct
@@ -1731,10 +1749,9 @@ constexpr bool test_std_optional_specialisation()
         REQUIRE(i == 1000);
     }
 
-    // optional<pointer<T[]>> works correctly
+    // optional<pointer<T[]>> specialisation is *not* used
     {
         using Opt = std::optional<tcb::pointer<int[]>>;
-        static_assert(sizeof(Opt) == sizeof(tcb::pointer<int[]>));
 
         Opt opt{};
         REQUIRE(not opt.has_value());
@@ -1749,6 +1766,17 @@ constexpr bool test_std_optional_specialisation()
         std::ranges::fill(**opt, 99);
 
         REQUIRE(std::ranges::all_of(arr, [](int i) { return i == 99; }));
+
+        // Can differentiate between a disenaged optional and one holding
+        // a pointer to an empty array
+        opt = tcb::array_ptr<int>();
+
+        REQUIRE(opt.has_value());
+        REQUIRE((**opt).data() == nullptr);
+        REQUIRE((**opt).size() == 0);
+
+        opt.reset();
+        REQUIRE(not opt.has_value());
     }
 
     return true;

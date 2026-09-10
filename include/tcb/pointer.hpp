@@ -697,11 +697,6 @@ private:
     using slice_type = slice<std::remove_const_t<T>>;
     mutable slice_type slice_ = slice_type(nullptr, 0);
 
-    friend class std::optional<pointer<T[]>>;
-
-    // Secret nullptr constructor for use by optional
-    constexpr pointer(std::nullptr_t) noexcept { }
-
     constexpr explicit pointer(T* ptr, std::size_t sz)
         : slice_(const_cast<std::remove_const_t<T>*>(ptr), sz)
     {
@@ -723,11 +718,14 @@ public:
     static constexpr auto from_address_with_size(U* ptr TCB_PTR_LIFETIME_BOUND, std::size_t sz)
         -> pointer
     {
-        if (ptr == nullptr) {
-            TCB_PTR_RUNTIME_ERROR("Null pointer passed to from_address_with_size()");
+        if (ptr == nullptr && sz > 0) {
+            TCB_PTR_RUNTIME_ERROR(
+                "Null pointer and nonzero size passed to from_address_with_size()");
         }
         return pointer(ptr, sz);
     }
+
+    pointer() = default;
 
     pointer(pointer const&) = default;
 
@@ -948,6 +946,7 @@ struct hash<tcb::pointer<T>> {
 // MARK: std::optional
 
 template <typename T>
+    requires(!std::is_unbounded_array_v<T>)
 class optional<tcb::pointer<T>> {
 private:
     tcb::pointer<T> ptr_;
