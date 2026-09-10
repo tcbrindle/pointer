@@ -1249,7 +1249,7 @@ public:
     template <typename U = tcb::pointer<T>>
     constexpr auto value_or(U&& default_value) const& -> tcb::pointer<T>
     {
-        static_assert(std::is_convertible_v<T&&, tcb::pointer<T>>);
+        static_assert(std::is_convertible_v<U&&, tcb::pointer<T>>);
 
         if (has_value()) {
             return ptr_;

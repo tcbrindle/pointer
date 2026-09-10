@@ -1746,6 +1746,32 @@ constexpr bool test_std_optional_specialisation()
         REQUIRE(o1->to_address() == &j);
     }
 
+    // value_or
+    {
+        using Opt = std::optional<pointer<int>>;
+
+        int value = 99;
+        int default_value = 42;
+
+        // lvalue
+        Opt opt = std::nullopt;
+        auto result = opt.value_or(ptr_to_mut(default_value));
+        REQUIRE(result.to_address() == &default_value);
+
+        opt = pointer_to_mut(value);
+        result = opt.value_or(pointer_to_mut(default_value));
+        REQUIRE(result.to_address() == &value);
+
+        // rvalue
+        opt.reset();
+        result = std::move(opt).value_or(ptr_to_mut(default_value));
+        REQUIRE(result.to_address() == &default_value);
+
+        opt = pointer_to_mut(value);
+        result = std::move(opt).value_or(pointer_to_mut(default_value));
+        REQUIRE(result.to_address() == &value);
+    }
+
     // Iterator support
     {
         using Opt = std::optional<tcb::pointer<int>>;
