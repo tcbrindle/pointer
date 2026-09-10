@@ -757,6 +757,16 @@ struct no_spaceship {
     constexpr bool operator>=(no_spaceship other) const { return !(*this < other); }
 };
 
+struct equality_only {
+    bool operator==(equality_only const&) const = default;
+};
+
+struct spaceship_only {
+    int i;
+
+    friend constexpr auto operator<=>(spaceship_only a, spaceship_only b) { return a.i <=> b.i; }
+};
+
 constexpr bool test_slice()
 {
     // Basic slice functionality
@@ -853,6 +863,21 @@ constexpr bool test_slice()
             auto cmp = *ptr <=> *ptr;
             static_assert(std::same_as<decltype(cmp), std::weak_ordering>);
             REQUIRE(cmp == std::weak_ordering::equivalent);
+        }
+
+        // Comparison operators are constrained as expected
+        {
+            using incomparable = std::span<int>;
+
+            static_assert(std::equality_comparable<tcb::slice<int>>);
+            static_assert(std::equality_comparable<tcb::slice<equality_only>>);
+            static_assert(not std::equality_comparable<tcb::slice<spaceship_only>>);
+            static_assert(not std::equality_comparable<tcb::slice<incomparable>>);
+
+            static_assert(std::three_way_comparable<tcb::slice<int>>);
+            static_assert(not std::three_way_comparable<tcb::slice<equality_only>>);
+            static_assert(not std::three_way_comparable<tcb::slice<spaceship_only>>);
+            static_assert(not std::three_way_comparable<tcb::slice<incomparable>>);
         }
     }
 
@@ -987,6 +1012,21 @@ constexpr bool test_unchecked_slice()
             auto cmp = ptr->unchecked <=> ptr->unchecked;
             static_assert(std::same_as<decltype(cmp), std::weak_ordering>);
             REQUIRE(cmp == std::weak_ordering::equivalent);
+        }
+
+        // Comparison operators are constrained as expected
+        {
+            using incomparable = std::span<int>;
+
+            static_assert(std::equality_comparable<tcb::unchecked_slice<int>>);
+            static_assert(std::equality_comparable<tcb::unchecked_slice<equality_only>>);
+            static_assert(not std::equality_comparable<tcb::unchecked_slice<spaceship_only>>);
+            static_assert(not std::equality_comparable<tcb::unchecked_slice<incomparable>>);
+
+            static_assert(std::three_way_comparable<tcb::unchecked_slice<int>>);
+            static_assert(not std::three_way_comparable<tcb::unchecked_slice<equality_only>>);
+            static_assert(not std::three_way_comparable<tcb::unchecked_slice<spaceship_only>>);
+            static_assert(not std::three_way_comparable<tcb::unchecked_slice<incomparable>>);
         }
     }
 
