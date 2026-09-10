@@ -45,7 +45,7 @@ void slices()
     // auto& oob = *ptr;
     // oob[1'000] = 0;
 
-    // Slice *iterators* are bounds checked by default as well.
+    // Slice *iterators* are bounds checked as well.
     // This means that trying to use an iterator which
     // would point to an invalid location will be a runtime error:
     // [[maybe_unused]] auto error1 = *slice.end();
