@@ -943,6 +943,20 @@ struct hash<tcb::pointer<T>> {
     }
 };
 
+} // namespace std
+
+namespace tcb::detail {
+
+template <typename>
+inline constexpr bool is_optional_v = false;
+
+template <typename T>
+inline constexpr bool is_optional_v<std::optional<T>> = true;
+
+} // namespace tcb::detail
+
+namespace std {
+
 // MARK: std::optional
 
 template <typename T>
@@ -1227,9 +1241,10 @@ public:
     }
 
     template <typename U = tcb::pointer<T>>
-        requires std::is_convertible_v<U&&, tcb::pointer<T>>
     constexpr auto value_or(U&& default_value) const& -> tcb::pointer<T>
     {
+        static_assert(std::is_convertible_v<T&&, tcb::pointer<T>>);
+
         if (has_value()) {
             return ptr_;
         } else {
@@ -1238,9 +1253,10 @@ public:
     }
 
     template <typename U = tcb::pointer<T>>
-        requires std::is_convertible_v<U&&, tcb::pointer<T>>
     constexpr auto value_or(U&& default_value) && -> tcb::pointer<T>
     {
+        static_assert(std::is_convertible_v<U&&, tcb::pointer<T>>);
+
         if (has_value()) {
             return std::move(ptr_);
         } else {
@@ -1252,35 +1268,44 @@ public:
      * Monadic operations
      */
     template <typename F>
-        requires invocable<F, tcb::pointer<T>&>
     constexpr auto and_then(F&& f) &
     {
+        static_assert(invocable<F, tcb::pointer<T>&>);
+        using R = invoke_result_t<F, tcb::pointer<T>&>;
+        static_assert(tcb::detail::is_optional_v<R>);
+
         if (has_value()) {
-            return std::invoke(static_cast<F&&>(f), ptr_);
+            return std::invoke(static_cast<F&&>(f), value());
         } else {
-            return remove_cvref_t<invoke_result_t<F, tcb::pointer<T>&>>{};
+            return remove_cvref_t<R>{};
         }
     }
 
     template <typename F>
-        requires invocable<F, tcb::pointer<T> const&>
     constexpr auto and_then(F&& f) const&
     {
+        static_assert(invocable<F, tcb::pointer<T> const&>);
+        using R = invoke_result_t<F, tcb::pointer<T> const&>;
+        static_assert(tcb::detail::is_optional_v<R>);
+
         if (has_value()) {
-            return std::invoke(static_cast<F&&>(f), ptr_);
+            return std::invoke(static_cast<F&&>(f), value());
         } else {
-            return remove_cvref_t<invoke_result_t<F, tcb::pointer<T> const&>>{};
+            return remove_cvref_t<R>{};
         }
     }
 
     template <typename F>
-        requires invocable<F, tcb::pointer<T>&&>
     constexpr auto and_then(F&& f) &&
     {
+        static_assert(invocable<F, tcb::pointer<T>&&>);
+        using R = invoke_result_t<F, tcb::pointer<T>&&>;
+        static_assert(tcb::detail::is_optional_v<R>);
+
         if (has_value()) {
-            return std::invoke(static_cast<F&&>(f), std::move(ptr_));
+            return std::invoke(static_cast<F&&>(f), std::move(value()));
         } else {
-            return remove_cvref_t<invoke_result_t<F, tcb::pointer<T>&&>>{};
+            return remove_cvref_t<R>{};
         }
     }
 
@@ -1288,61 +1313,87 @@ public:
         requires invocable<F, tcb::pointer<T> const&&>
     constexpr auto and_then(F&& f) const&&
     {
+        static_assert(invocable<F, tcb::pointer<T> const&&>);
+        using R = invoke_result_t<F, tcb::pointer<T> const&&>;
+        static_assert(tcb::detail::is_optional_v<R>);
+
         if (has_value()) {
-            return std::invoke(static_cast<F&&>(f), std::move(ptr_));
+            return std::invoke(static_cast<F&&>(f), std::move(value()));
         } else {
-            return remove_cvref_t<invoke_result_t<F, tcb::pointer<T> const&&>>{};
+            return remove_cvref_t<R>{};
         }
     }
 
-    template <typename F, typename U = remove_cvref_t<invoke_result_t<F, tcb::pointer<T>&>>>
-        requires(!same_as<U, in_place_t> && !same_as<U, nullopt_t>)
-    constexpr auto transform(F&& f) & -> optional<U>
+    template <typename F>
+    constexpr auto transform(F&& f) &
     {
-        if (has_value()) {
-            return optional<U>(std::invoke(static_cast<F&&>(f), ptr_));
-        } else {
-            return optional<U>{};
-        }
-    }
+        static_assert(invocable<F, tcb::pointer<T>&>);
+        using U = remove_cvref_t<invoke_result_t<F, tcb::pointer<T>&>>;
+        static_assert(is_object_v<U> && !is_array_v<U>);
+        static_assert(!is_same_v<U, in_place_t>);
+        static_assert(!is_same_v<U, nullopt_t>);
 
-    template <typename F, typename U = remove_cvref_t<invoke_result_t<F, tcb::pointer<T> const&>>>
-        requires(!same_as<U, in_place_t> && !same_as<U, nullopt_t>)
-    constexpr auto transform(F&& f) const& -> optional<U>
-    {
         if (has_value()) {
-            return optional<U>(std::invoke(static_cast<F&&>(f), ptr_));
-        } else {
-            return optional<U>{};
-        }
-    }
-
-    template <typename F, typename U = remove_cvref_t<invoke_result_t<F, tcb::pointer<T>&&>>>
-        requires(!same_as<U, in_place_t> && !same_as<U, nullopt_t>)
-    constexpr auto transform(F&& f) && -> optional<U>
-    {
-        if (has_value()) {
-            return optional<U>(std::invoke(static_cast<F&&>(f), std::move(ptr_)));
-        } else {
-            return optional<U>{};
-        }
-    }
-
-    template <typename F, typename U = remove_cvref_t<invoke_result_t<F, tcb::pointer<T> const&&>>>
-        requires(!same_as<U, in_place_t> && !same_as<U, nullopt_t>)
-    constexpr auto transform(F&& f) const&& -> optional<U>
-    {
-        if (has_value()) {
-            return optional<U>(std::invoke(static_cast<F&&>(f), std::move(ptr_)));
+            return optional<U>(in_place, std::invoke(static_cast<F&&>(f), **this));
         } else {
             return optional<U>{};
         }
     }
 
     template <typename F>
-        requires invocable<F> && same_as<invoke_result_t<F>, optional>
+    constexpr auto transform(F&& f) const&
+    {
+        static_assert(invocable<F, tcb::pointer<T> const&>);
+        using U = remove_cvref_t<invoke_result_t<F, tcb::pointer<T> const&>>;
+        static_assert(is_object_v<U> && !is_array_v<U>);
+        static_assert(!is_same_v<U, in_place_t>);
+        static_assert(!is_same_v<U, nullopt_t>);
+
+        if (has_value()) {
+            return optional<U>(in_place, std::invoke(static_cast<F&&>(f), **this));
+        } else {
+            return optional<U>{};
+        }
+    }
+
+    template <typename F>
+    constexpr auto transform(F&& f) &&
+    {
+        static_assert(invocable<F, tcb::pointer<T>>);
+        using U = remove_cvref_t<invoke_result_t<F, tcb::pointer<T>>>;
+        static_assert(is_object_v<U> && !is_array_v<U>);
+        static_assert(!is_same_v<U, in_place_t>);
+        static_assert(!is_same_v<U, nullopt_t>);
+
+        if (has_value()) {
+            return optional<U>(in_place, std::invoke(static_cast<F&&>(f), std::move(**this)));
+        } else {
+            return optional<U>{};
+        }
+    }
+
+    template <typename F>
+    constexpr auto transform(F&& f) const&&
+    {
+        static_assert(invocable<F, tcb::pointer<T> const>);
+        using U = remove_cvref_t<invoke_result_t<F, tcb::pointer<T> const>>;
+        static_assert(is_object_v<U> && !is_array_v<U>);
+        static_assert(!is_same_v<U, in_place_t>);
+        static_assert(!is_same_v<U, nullopt_t>);
+
+        if (has_value()) {
+            return optional<U>(in_place, std::invoke(static_cast<F&&>(f), std::move(**this)));
+        } else {
+            return optional<U>{};
+        }
+    }
+
+    template <typename F>
+        requires invocable<F>
     constexpr auto or_else(F&& f) const& -> optional
     {
+        static_assert(is_same_v<invoke_result_t<F>, optional>);
+
         if (has_value()) {
             return *this;
         } else {
@@ -1351,9 +1402,11 @@ public:
     }
 
     template <typename F>
-        requires invocable<F> && same_as<invoke_result_t<F>, optional>
+        requires invocable<F>
     constexpr auto or_else(F&& f) && -> optional
     {
+        static_assert(is_same_v<invoke_result_t<F>, optional>);
+
         if (has_value()) {
             return std::move(*this);
         } else {
