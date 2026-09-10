@@ -169,13 +169,6 @@ constexpr bool test_pointer_static_properties()
     static_assert(std::totally_ordered<P>);
     static_assert(std::three_way_comparable<P, std::strong_ordering>);
 
-    // pointer<T> is explicitly (but not implicitly) convertible to bool
-    static_assert(not std::is_convertible_v<P, bool>);
-    static_assert(requires(P& p) {
-        { static_cast<bool>(p) };
-        { p ? 1 : 0 };
-    });
-
     // pointer_to object is explicitly but not implicitly convertible to T*
     static_assert(not std::is_convertible_v<P, T*>);
     if constexpr (is_object) {
@@ -349,9 +342,6 @@ constexpr bool test_pointer_to_object()
 
         // explicit cast to int* works correctly
         REQUIRE(static_cast<int*>(p) == std::addressof(i));
-
-        // bool contextual conversion works as expected
-        REQUIRE(p);
 
         // dereferencing works correctly
         REQUIRE(*p == 0);

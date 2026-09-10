@@ -158,8 +158,6 @@ public:
 
     constexpr explicit operator T*() const noexcept { return addr_; }
 
-    constexpr explicit operator bool() const noexcept { return addr_ != nullptr; }
-
 #ifdef __cpp_multidimensional_subscript
     constexpr auto operator[]() const noexcept -> T& { return *addr_; }
 #endif
@@ -282,8 +280,6 @@ public:
 #endif
         return static_cast<U*>(this->addr_);
     }
-
-    explicit operator bool() const noexcept { return this->addr_ != nullptr; }
 
     friend auto operator==(pointer lhs, pointer rhs) -> bool
     {
@@ -758,8 +754,6 @@ public:
     }
     void operator->() const&& = delete;
 
-    constexpr explicit operator bool() const noexcept { return slice_.data() != nullptr; }
-
     friend constexpr auto operator==(pointer const& lhs, pointer const& rhs) -> bool
     {
         return lhs->data() == rhs->data() && lhs->size() == rhs->size();
@@ -1186,7 +1180,7 @@ public:
         return std::move(ptr_);
     }
 
-    constexpr auto has_value() const noexcept -> bool { return static_cast<bool>(ptr_); }
+    constexpr auto has_value() const noexcept -> bool { return ptr_.to_address() != nullptr; }
     constexpr explicit operator bool() const noexcept { return has_value(); }
 
     constexpr auto value() & -> tcb::pointer<T>&
