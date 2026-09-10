@@ -1809,6 +1809,137 @@ constexpr bool test_std_optional_specialisation()
         REQUIRE(not opt.has_value());
     }
 
+    // Monadic operations
+    {
+        using Opt = std::optional<tcb::pointer<int>>;
+
+        int value = 42;
+        Opt engaged = tcb::pointer_to_mut(value);
+        Opt disengaged = std::nullopt;
+
+        // and_then: engaged and disengaged cases
+        {
+            bool called = false;
+            auto func = [&](auto& p) -> std::optional<int> {
+                called = true;
+                static_assert(std::same_as<decltype(p), tcb::pointer<int>&>);
+                REQUIRE(p.to_address() == &value);
+                return 99;
+            };
+
+            auto result = engaged.and_then(func);
+
+            static_assert(std::same_as<decltype(result), std::optional<int>>);
+            REQUIRE(called);
+            REQUIRE(result.has_value());
+            REQUIRE(*result == 99);
+
+            called = false;
+            auto empty_result = disengaged.and_then(func);
+
+            static_assert(std::same_as<decltype(empty_result), std::optional<int>>);
+            REQUIRE(not called);
+            REQUIRE(not empty_result.has_value());
+        }
+
+        // and_then: const lvalue, rvalue, and const rvalue overloads
+        {
+            auto from_const_lvalue
+                = std::as_const(engaged).and_then([](auto&& p) -> std::optional<int> {
+                      static_assert(std::same_as<decltype(p), tcb::pointer<int> const&>);
+                      return 99;
+                  });
+            REQUIRE(from_const_lvalue.has_value());
+            REQUIRE(*from_const_lvalue == 99);
+
+            auto from_rvalue
+                = Opt(tcb::pointer_to_mut(value)).and_then([](auto&& p) -> std::optional<int> {
+                      static_assert(std::same_as<decltype(p), tcb::pointer<int>&&>);
+                      return 99;
+                  });
+            REQUIRE(from_rvalue.has_value());
+            REQUIRE(*from_rvalue == 99);
+
+            auto from_const_rvalue
+                = std::move(std::as_const(engaged)).and_then([](auto&& p) -> std::optional<int> {
+                      static_assert(std::same_as<decltype(p), tcb::pointer<int> const&&>);
+                      return 99;
+                  });
+            REQUIRE(from_const_rvalue.has_value());
+            REQUIRE(*from_const_rvalue == 99);
+        }
+
+        // transform: engaged and disengaged cases
+        {
+            auto transformed = engaged.transform([](tcb::pointer<int>& p) { return *p * 2; });
+
+            static_assert(std::same_as<decltype(transformed), std::optional<int>>);
+            REQUIRE(transformed.has_value());
+            REQUIRE(*transformed == 84);
+
+            bool called = false;
+            auto empty_result = disengaged.transform([&](auto&) {
+                called = true;
+                return 99;
+            });
+
+            REQUIRE(not called);
+            REQUIRE(not empty_result.has_value());
+        }
+
+        // transform: const lvalue, rvalue, and const rvalue overloads
+        {
+            auto from_const_lvalue = std::as_const(engaged).transform([](auto&& p) {
+                static_assert(std::same_as<decltype(p), tcb::pointer<int> const&>);
+                return 99;
+            });
+            REQUIRE(from_const_lvalue == std::optional<int>{99});
+
+            auto from_rvalue = Opt(tcb::pointer_to_mut(value)).transform([](auto&& p) {
+                static_assert(std::same_as<decltype(p), tcb::pointer<int>&&>);
+                return 99;
+            });
+            REQUIRE(from_rvalue == std::optional<int>{99});
+
+            auto from_const_rvalue = std::move(std::as_const(engaged)).transform([](auto&& p) {
+                static_assert(std::same_as<decltype(p), tcb::pointer<int> const&&>);
+                return 99;
+            });
+            REQUIRE(from_const_rvalue == std::optional<int>{99});
+        }
+
+        // or_else: fallback is called only for disengaged optionals
+        {
+            bool called = false;
+
+            auto present = engaged.or_else([&] {
+                called = true;
+                return Opt(tcb::pointer_to_mut(value));
+            });
+
+            REQUIRE(not called);
+            REQUIRE(present.has_value());
+            REQUIRE(present->to_address() == &value);
+
+            auto absent = disengaged.or_else([&] {
+                called = true;
+                return Opt(tcb::pointer_to_mut(value));
+            });
+
+            REQUIRE(called);
+            REQUIRE(absent.has_value());
+            REQUIRE(absent->to_address() == &value);
+        }
+
+        // or_else: rvalue optionals preserve their value
+        {
+            auto result = Opt(tcb::pointer_to_mut(value)).or_else([] { return Opt{}; });
+
+            REQUIRE(result.has_value());
+            REQUIRE(result->to_address() == &value);
+        }
+    }
+
     return true;
 }
 static_assert(test_std_optional_specialisation());

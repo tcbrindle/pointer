@@ -11,4 +11,5 @@ struct ptr_runtime_error : std::runtime_error {
 };
 #define TCB_PTR_RUNTIME_ERROR(msg) throw ptr_runtime_error(msg)
 
+#define TCB_PTR_OPTIONAL_MONADIC_SUPPORT 1
 #define TCB_PTR_OPTIONAL_RANGE_SUPPORT 1
