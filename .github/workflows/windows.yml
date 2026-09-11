@@ -11,7 +11,7 @@ env:
 
 jobs:
   build:
-    runs-on: windows-2022
+    runs-on: windows-2025
     strategy:
       matrix:
         platform: [x86, x64]
@@ -19,8 +19,7 @@ jobs:
 
     steps:
     - uses: actions/checkout@master
-    - uses: seanmiddleditch/gha-setup-ninja@master
-    - uses: TheMrMilchmann/setup-msvc-dev@v3
+    - uses: TheMrMilchmann/setup-msvc-dev@v4
       with:
         arch: ${{matrix.platform}}
 
