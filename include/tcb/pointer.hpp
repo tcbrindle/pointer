@@ -34,33 +34,28 @@ DEALINGS IN THE SOFTWARE.
 #    include TCB_PTR_CONFIG_HEADER
 #endif
 
-#ifdef TCB_PTR_BUILDING_MODULE
-#    define TCB_PTR_EXPORT export
-#else
-#    define TCB_PTR_EXPORT
-#    include <algorithm> // for std::ranges::equal, std::lexicographical_compare_three_way
-#    include <compare> // for std::strong_ordering
-#    include <concepts>
-#    include <cstddef>
-#    include <cstdlib>
-#    include <functional> // for std::invoke
-#    include <iterator> // for std::reverse_iterator
-#    include <memory> // for std::addressof
-#    include <optional> // for std::optional<pointer>
-#    include <ranges> // for std::ranges::contiguous_range etc
-#    include <stdexcept> // for std::out_of_range
-#    include <typeinfo>
-#    include <type_traits>
+#include <algorithm> // for std::ranges::equal, std::lexicographical_compare_three_way
+#include <compare> // for std::strong_ordering
+#include <concepts>
+#include <cstddef>
+#include <cstdlib>
+#include <functional> // for std::invoke
+#include <iterator> // for std::reverse_iterator
+#include <memory> // for std::addressof
+#include <optional> // for std::optional<pointer>
+#include <ranges> // for std::ranges::contiguous_range etc
+#include <stdexcept> // for std::out_of_range
+#include <typeinfo>
+#include <type_traits>
 
-#    ifndef NDEBUG
-#        include <cstdio>
-#        include <exception>
-#    endif
+#ifndef NDEBUG
+#    include <cstdio>
+#    include <exception>
+#endif
 
-#    ifdef _MSC_VER
-#        include <intrin.h> // for __fastfail
-#    endif
-#endif // TCB_PTR_BUILDING_MODULE
+#ifdef _MSC_VER
+#    include <intrin.h> // for __fastfail
+#endif
 
 #if __has_cpp_attribute(clang::lifetimebound)
 #    define TCB_PTR_LIFETIME_BOUND [[clang::lifetimebound]]
@@ -126,7 +121,7 @@ namespace tcb {
 
 // MARK: Object pointer
 
-TCB_PTR_EXPORT template <typename>
+template <typename>
 struct pointer;
 
 template <typename T>
@@ -449,10 +444,10 @@ public:
 
 // MARK: Unchecked slice
 
-TCB_PTR_EXPORT template <typename T>
+template <typename T>
 struct TCB_PTR_GSL_POINTER(T) slice;
 
-TCB_PTR_EXPORT template <typename T>
+template <typename T>
 struct TCB_PTR_GSL_POINTER(T) unchecked_slice {
 private:
     static_assert(std::is_object_v<T> && !std::is_const_v<T>,
@@ -779,12 +774,11 @@ public:
     }
 };
 
-TCB_PTR_EXPORT template <typename T>
+template <typename T>
 using array_pointer = pointer<T[]>;
 
 // MARK: Functions
 
-TCB_PTR_EXPORT
 struct pointer_to_t {
     template <typename T>
     constexpr auto operator()(T const& obj TCB_PTR_LIFETIME_BOUND) const -> pointer<T const>
@@ -796,7 +790,6 @@ struct pointer_to_t {
     void operator()(T const&&) const = delete;
 };
 
-TCB_PTR_EXPORT
 struct pointer_to_mut_t {
     template <typename T>
         requires(!std::is_const_v<T>)
@@ -806,7 +799,6 @@ struct pointer_to_mut_t {
     }
 };
 
-TCB_PTR_EXPORT
 struct pointer_to_array_t {
     template <typename R>
         requires detail::pointer_compatible_range<R>
@@ -818,7 +810,6 @@ struct pointer_to_array_t {
     }
 };
 
-TCB_PTR_EXPORT
 struct pointer_to_mut_array_t {
     template <typename R>
         requires detail::pointer_compatible_range<R>
@@ -831,7 +822,6 @@ struct pointer_to_mut_array_t {
     }
 };
 
-TCB_PTR_EXPORT
 struct to_address_t {
     template <typename T>
     constexpr auto operator()(pointer<T> ptr) const noexcept -> typename pointer<T>::element_type*
@@ -840,7 +830,7 @@ struct to_address_t {
     }
 };
 
-TCB_PTR_EXPORT template <typename To>
+template <typename To>
 struct static_pointer_cast_t {
     template <typename From>
         requires requires(From* from) {
@@ -858,7 +848,7 @@ struct static_pointer_cast_t {
     }
 };
 
-TCB_PTR_EXPORT template <typename To>
+template <typename To>
 struct const_pointer_cast_t {
     template <typename From>
         requires requires(From* from) {
@@ -876,7 +866,7 @@ struct const_pointer_cast_t {
     }
 };
 
-TCB_PTR_EXPORT template <typename Derived>
+template <typename Derived>
 struct dynamic_pointer_cast_t {
     template <typename Base>
         requires requires(Base* base) {
@@ -893,32 +883,32 @@ struct dynamic_pointer_cast_t {
     }
 };
 
-TCB_PTR_EXPORT inline constexpr auto pointer_to = pointer_to_t{};
-TCB_PTR_EXPORT inline constexpr auto pointer_to_mut = pointer_to_mut_t{};
-TCB_PTR_EXPORT inline constexpr auto pointer_to_array = pointer_to_array_t{};
-TCB_PTR_EXPORT inline constexpr auto pointer_to_mut_array = pointer_to_mut_array_t{};
-TCB_PTR_EXPORT inline constexpr auto to_address = to_address_t{};
+inline constexpr auto pointer_to = pointer_to_t{};
+inline constexpr auto pointer_to_mut = pointer_to_mut_t{};
+inline constexpr auto pointer_to_array = pointer_to_array_t{};
+inline constexpr auto pointer_to_mut_array = pointer_to_mut_array_t{};
+inline constexpr auto to_address = to_address_t{};
 
-TCB_PTR_EXPORT template <typename To>
+template <typename To>
 inline constexpr auto static_pointer_cast = static_pointer_cast_t<To>{};
 
-TCB_PTR_EXPORT template <typename To>
+template <typename To>
 inline constexpr auto const_pointer_cast = const_pointer_cast_t<To>{};
 
-TCB_PTR_EXPORT template <typename Derived>
+template <typename Derived>
 inline constexpr auto dynamic_pointer_cast = dynamic_pointer_cast_t<Derived>{};
 
 // Slightly shortened aliases
-TCB_PTR_EXPORT template <typename T>
+template <typename T>
 using ptr = pointer<T>;
 
-TCB_PTR_EXPORT template <typename T>
+template <typename T>
 using array_ptr = pointer<T[]>;
 
-TCB_PTR_EXPORT inline constexpr auto& ptr_to = pointer_to;
-TCB_PTR_EXPORT inline constexpr auto& ptr_to_mut = pointer_to_mut;
-TCB_PTR_EXPORT inline constexpr auto& ptr_to_array = pointer_to_array;
-TCB_PTR_EXPORT inline constexpr auto& ptr_to_mut_array = pointer_to_mut_array;
+inline constexpr auto& ptr_to = pointer_to;
+inline constexpr auto& ptr_to_mut = pointer_to_mut;
+inline constexpr auto& ptr_to_array = pointer_to_array;
+inline constexpr auto& ptr_to_mut_array = pointer_to_mut_array;
 
 } // namespace tcb
 

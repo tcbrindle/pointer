@@ -4,31 +4,36 @@
 
 module;
 
-#include <algorithm>
-#include <compare>
-#include <concepts>
-#include <cstddef>
-#include <functional>
-#include <memory>
-#include <optional>
-#include <ranges>
-#include <stdexcept>
-#include <typeinfo>
-#include <type_traits>
-
-#ifndef NDEBUG
-#    include <cstdio>
-#    include <exception>
-#endif
-
-#ifdef _MSC_VER
-#    include <intrin.h> // for __fastfail
-#endif
+#include <tcb/pointer.hpp>
 
 export module tcb.pointer;
 
-#define TCB_PTR_BUILDING_MODULE
+export namespace tcb {
 
-extern "C++" {
-#include "tcb/pointer.hpp"
-}
+// Types
+using tcb::pointer;
+using tcb::slice;
+using tcb::unchecked_slice;
+
+using tcb::array_pointer;
+
+// Functions
+using tcb::pointer_to;
+using tcb::pointer_to_array;
+using tcb::pointer_to_mut;
+using tcb::pointer_to_mut_array;
+using tcb::to_address;
+
+using tcb::const_pointer_cast;
+using tcb::dynamic_pointer_cast;
+using tcb::static_pointer_cast;
+
+// Aliases
+using tcb::array_ptr;
+using tcb::ptr;
+using tcb::ptr_to;
+using tcb::ptr_to_array;
+using tcb::ptr_to_mut;
+using tcb::ptr_to_mut_array;
+
+} // namespace tcb
